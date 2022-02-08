@@ -131,7 +131,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
                  #Mean of channel magnitudes is calculated
                  if cmpn[kk][0][mty] and cmpe[kk][0][mty]:
                     mm = (cmpn[kk][0][mty] + cmpe[kk][0][mty])/2
-                    meanmag_ml_set.append(mm)
+                    meanmag_ml_set.append([kk,mm])
                  # Magnitudes of Mean channel amplitudes is calculated if 
                  if not stc or (cmpn[kk][4][mty] and cmpe[kk][4][mty]) or whstc: 
                     #mean_amp = (cmpn[kk][1] + cmpe[kk][1])/2 # Artimetic mean
@@ -141,13 +141,12 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
                        ma = huttonboore(mean_amp_geo,ipodist,corr,stc)
                     if mty == 1:
                        ma = dibona(mean_amp_geo,ipodist,corr,stc)
-                    meanamp_ml_set.append(ma)
+                    meanamp_ml_set.append([kk,ma])
         #except Exception as e:
         #       sys.stderr.write(' '.join(("Error in magnitudes set building for ",str(kk),'\n')))
     return meanmag_ml_set,meanamp_ml_set
            
 def calculate_event_ml(magnitudes,maxit,stop):
-    print(maxit,stop)
     m=numpy.array(magnitudes)
     finished = False
     N = 0
@@ -171,7 +170,7 @@ def calculate_event_ml(magnitudes,maxit,stop):
              if deltaMean <= stop or N == maxit:
                 finished = True
                 Ml_ns = len(m)
-                condition='deltaMean' if deltaMean <= stop else 'maxit'
+                condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
           else:
              finished = True
              Ml_Std  = False
@@ -363,16 +362,24 @@ for index, row in dfa.iterrows():
 
 magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
 # Hutton and Boore
-meanmag_ml_sta,meanamp_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
-ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond = calculate_event_ml(meanamp_ml_sta,outlayers_max_it,outlayers_red_stop)
+meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
+meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
+meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
+ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond = calculate_event_ml(meanamp_ml,outlayers_max_it,outlayers_red_stop)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
 # Di Bona
-meanmag_ml_sta,meanamp_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
-ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond = calculate_event_ml(meanamp_ml_sta,outlayers_max_it,outlayers_red_stop)
+meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
+meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
+meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
+ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond = calculate_event_ml(meanamp_ml,outlayers_max_it,outlayers_red_stop)
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 # Now closing all output files
 magnitudes_out.close()
 log_out.close()
+for x, y in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta):
+    sth,mh = map(str,x)
+    std,md = map(str,y)
+    print(sth,mh,std,md, sep=' ')
 sys.exit()
