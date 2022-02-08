@@ -55,9 +55,10 @@ class MyParser(argparse.ArgumentParser):
 
 def parseArguments():
         parser=MyParser()	
-        parser.add_argument('--infile',      default=False,          help='Waveform File Name')
-        parser.add_argument('--dbona_corr',  default='dbcor.csv',    help='Input file with DiBona Stations corrections')
-        parser.add_argument('--conf',        default='./pyml.conf',  help='A file containing sections and related parameters (see the example)')
+        parser.add_argument('--infile',      default=None,          help='pyamp-amplitudes.csv file full path')
+        parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event')
+        parser.add_argument('--dbona_corr',  default='dbcor.csv',   help='Input file with DiBona Stations corrections')
+        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (see the example)')
         if len(sys.argv)==1:
             parser.print_help()
             sys.exit(1)
@@ -182,6 +183,7 @@ def calculate_event_ml(magnitudes,maxit,stop):
 ## Main ##
 args = parseArguments()
 infile=args.infile
+eventid=args.eventid
 
 # Now loading the configuration file
 if os.path.exists(args.conf) and os.path.getsize(args.conf) > 0:
@@ -205,8 +207,8 @@ except Exception as e:
     sys.stderr.write(("\n"+str(e)+"\n\n"))
     sys.exit(1)
 try:
-    magnitudes_out=eval(filenames_parameters['magnitudes'])
-    log_out=eval(filenames_parameters['log'])
+    magnitudes_out=str(eventid)+'_'+eval(filenames_parameters['magnitudes'])
+    log_out=str(eventid)+'_'+eval(filenames_parameters['log'])
 except Exception as e:
     sys.stderr.write(("\n"+str(e)+"\n\n"))
     sys.exit(1)
@@ -358,17 +360,17 @@ for index, row in dfa.iterrows():
     else:
        log_out.write(' '.join(("Component not recognized for ",str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha']),"\n")))
 
-magnitudes_out.write("ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
+magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
 # Hutton and Boore
 meanmag_ml_sta,meanamp_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
 ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond = calculate_event_ml(meanamp_ml_sta,outlayers_max_it,outlayers_red_stop)
-mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
+#mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond = calculate_event_ml(meanamp_ml_sta,outlayers_max_it,outlayers_red_stop)
-mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
-magnitudes_out.write(';'.join((str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond,'\n')))
-magnitudes_out.write(';'.join((str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
+#mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
+magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond,'\n')))
+#magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 # Now closing all output files
 magnitudes_out.close()
 log_out.close()
