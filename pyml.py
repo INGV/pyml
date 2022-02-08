@@ -147,6 +147,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
     return meanmag_ml_set,meanamp_ml_set
            
 def calculate_event_ml(magnitudes,maxit,stop):
+    print(maxit,stop)
     m=numpy.array(magnitudes)
     finished = False
     N = 0
