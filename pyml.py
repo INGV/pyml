@@ -376,10 +376,10 @@ ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond = calculate_event_ml(meanamp_ml,outlayers_m
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 # Now closing all output files
-magnitudes_out.close()
-log_out.close()
 for x, y in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta):
     sth,mh = map(str,x)
     std,md = map(str,y)
-    print(sth,mh,std,md, sep=' ')
+    magnitudes_out.write(' '.join(('MLSTA',sth,mh,std,md,'\n')))
+magnitudes_out.close()
+log_out.close()
 sys.exit()
