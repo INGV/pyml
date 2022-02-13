@@ -307,6 +307,10 @@ else:
 km=1000.
 #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
 for index, row in dfa.iterrows():
+    corner_low=float(row['LoCo'])
+    corner_high=float(row['HiCo'])
+    if corner_low >= 20:
+       continue
     seed_id='.'.join((str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha'])))
     log_out.write(' '.join(("Working on",seed_id,'\n')))
     # In this block all the possibile conditions not to use this waveforms are checked so to reduce useless computing time
