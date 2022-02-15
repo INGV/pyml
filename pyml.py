@@ -24,6 +24,7 @@ import geographiclib
 import pandas
 import numpy
 import math
+import scipy
 from pyrocko import cake
 from scipy import signal, stats
 from scipy.signal import butter, lfilter, freqz,find_peaks,detrend,welch,hilbert
@@ -142,29 +143,43 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
                     if mty == 1:
                        ma = dibona(mean_amp_geo,ipodist,corr,stc)
                     meanamp_ml_set.append([kk,ma])
-        #except Exception as e:
-        #       sys.stderr.write(' '.join(("Error in magnitudes set building for ",str(kk),'\n')))
+              else:
+                 log_out.write(' '.join(("Station skipped due to minmax distance: ",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
+           else:
+              log_out.write(' '.join(("Station skipped due to epidist: ",str(k),str(epidist),"\n")))
+        else:
+           log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
     return meanmag_ml_set,meanamp_ml_set
            
-def calculate_event_ml(magnitudes,maxit,stop):
+def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev):
     m=numpy.array(magnitudes)
+    s=magnitudes_sta
     finished = False
     N = 0
     Ml_Mean = numpy.mean(m)
-    Ml_Std  = numpy.std(m)
+    #Ml_Std  = numpy.std(m)
+    Ml_Std  = scipy.stats.median_abs_deviation(m)
     Ml_Medi = numpy.median(m)
     #print "--- Before Outliers Removal ---"
     #print Ml_Mean
     #print Ml_Std
     #print Ml_Medi
     Ml_ns_start = len(m)
+    removed=[]
     while not finished:
           N = N + 1
           Ml_Medi_old = Ml_Medi
-          m = numpy.asfarray(list(filter((lambda x: abs(x - Ml_Medi) <= Ml_Std ), m))) # Questa riga contiene la sintassi lambda (funzione anonima) che sostituisce la funzione drop_outliers ora commentata
+          distance_from_mean = abs(m - Ml_Medi)
+          not_outlier = distance_from_mean < max_dev * Ml_Medi
+          yes_outlier = distance_from_mean >= max_dev * Ml_Medi
+          removed.append(list(zip(s[yes_outlier],m[yes_outlier])))
+          m = m[not_outlier]
+          s = s[not_outlier]
+          #m = numpy.asfarray(list(filter((lambda x: abs(x - Ml_Medi) <= Ml_Std ), m))) # Questa riga contiene la sintassi lambda (funzione anonima) che sostituisce la funzione drop_outliers ora commentata
           if len(m) > 0:
              Ml_Mean = numpy.mean(m)
-             Ml_Std  = numpy.std(m)
+             #Ml_Std  = numpy.std(m)
+             Ml_Std  = scipy.stats.median_abs_deviation(m)
              Ml_Medi = numpy.median(m)
              deltaMean = abs(Ml_Medi-Ml_Medi_old)
              if deltaMean <= stop or N == maxit:
@@ -177,7 +192,7 @@ def calculate_event_ml(magnitudes,maxit,stop):
              Ml_Medi = False
              Ml_ns = False
              condition='emptyset'
-    return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition
+    return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed
 
 ###### End of Functions ##########
 ## Main ##
@@ -232,6 +247,8 @@ else:
 preconditions_parameters=get_config_dictionary(confObj, 'preconditions')
 theoP=eval(preconditions_parameters['theoretical_p'])
 theoS=eval(preconditions_parameters['theoretical_s'])
+delta_corner=float(preconditions_parameters['delta_corner'])
+max_lowcorner=float(preconditions_parameters['max_lowcorner'])
 
 try:
    station_magnitude_parameters=get_config_dictionary(confObj, 'station_magnitude')
@@ -280,14 +297,19 @@ except:
    log_out.write("No parameter 'maxdist' in section 'event_magnitude' of config file")
    sys.exit()
 try:
-   outlayers_max_it=int(event_magnitude_parameters['outlayers_max_it'])
+   outliers_max_it=int(event_magnitude_parameters['outliers_max_it'])
 except:
-   log_out.write("No parameter 'outlayers_max_it' in section 'event_magnitude' of config file")
+   log_out.write("No parameter 'outliers_max_it' in section 'event_magnitude' of config file")
    sys.exit()
 try:
-   outlayers_red_stop=float(event_magnitude_parameters['outlayers_red_stop'])
+   outliers_red_stop=float(event_magnitude_parameters['outliers_red_stop'])
 except:
-   log_out.write("No parameter 'outlayers_red_stop' in section 'event_magnitude' of config file")
+   log_out.write("No parameter 'outliers_red_stop' in section 'event_magnitude' of config file")
+   sys.exit()
+try:
+   outliers_nstd=float(event_magnitude_parameters['outliers_nstd'])
+except:
+   log_out.write("No parameter 'outliers_nstd' in section 'event_magnitude' of config file")
    sys.exit()
 cmp_keys=set()
 components_N={}
@@ -309,7 +331,8 @@ km=1000.
 for index, row in dfa.iterrows():
     corner_low=float(row['LoCo'])
     corner_high=float(row['HiCo'])
-    if corner_low >= 20:
+    if corner_low >= max_lowcorner or (corner_high-corner_low) < delta_corner:
+       log_out.write(' '.join(("Component skipped:",str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha']),str(corner_low),str(corner_high),"\n")))
        continue
     seed_id='.'.join((str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha'])))
     log_out.write(' '.join(("Working on",seed_id,'\n')))
@@ -369,21 +392,29 @@ magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOT
 meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
-ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond = calculate_event_ml(meanamp_ml,outlayers_max_it,outlayers_red_stop)
-#mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
+meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
+ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd)
+#mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
-ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond = calculate_event_ml(meanamp_ml,outlayers_max_it,outlayers_red_stop)
-#mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outlayers_max_it,outlayers_red_stop)
-magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond,'\n')))
+meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
+ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd)
+#mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
+magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 # Now closing all output files
 for x, y in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta):
     sth,mh = map(str,x)
     std,md = map(str,y)
     magnitudes_out.write(' '.join(('MLSTA',sth,mh,std,md,'\n')))
+for x in outliers_hb[0]:
+    sth,mh = map(str,list(x))
+    magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
+for y in outliers_db[0]:
+    std,md = map(str,list(y))
+    magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
 magnitudes_out.close()
 log_out.close()
 sys.exit()
