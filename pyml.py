@@ -126,9 +126,9 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
         kk=k+'_'+mtd
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
-           if epidist >= mid and epidist <= mad: # if epicentral distance is within the accepted range
+           ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
+           if ipodist >= mid and ipodist <= mad: # if ipocentral distance is within the accepted range
               if mtd != 'free' or (mtd == 'free' and abs(cmpn[kk][6]-cmpn[kk][5]) <= dp and abs(cmpe[kk][6]-cmpe[kk][5]) <= dp): # if the method is not free the deltapeak has no meaning orherwise it is evaluated
-                 ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
                  #Mean of channel magnitudes is calculated
                  if cmpn[kk][0][mty] and cmpe[kk][0][mty]:
                     mm = (cmpn[kk][0][mty] + cmpe[kk][0][mty])/2
