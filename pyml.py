@@ -166,6 +166,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
           N = N + 1
           Ml_Medi_old = Ml_Medi
           distance_from_mean = abs(m - Ml_Medi)
+          print(hm_cutoff)
           if hm_cutoff:
              w = numpy.asfarray(list(filter((lambda x: 1.0 if (x <= cutoff) else hm_cutoff/x,m)))) # Values beyond cutoff are downweighted
              print(w)
