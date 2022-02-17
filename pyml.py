@@ -169,7 +169,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
              Ml_Medi = numpy.sum(m * w)/numpy.sum(w)
              deltaMean = abs(Ml_Medi-Ml_Medi_old)
              Ml_Std=0.0
-          print(Ml_Medi_old,Ml_Medi,deltaMean)
+          print(N,Ml_Medi_old,Ml_Medi,deltaMean)
           if not hm_cutoff:
              not_outlier = distance_from_mean < max_dev * Ml_Std
              yes_outlier = distance_from_mean >= max_dev * Ml_Std
