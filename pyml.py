@@ -414,7 +414,7 @@ for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weight
     std,md = map(str,y)
     whb = str(wx)
     wdb = str(wy)
-    magnitudes_out.write(' '.join(('MLSTA',sth,mh,whb,std,md,wdb'\n')))
+    magnitudes_out.write(' '.join(('MLSTA',sth,mh,whb,std,md,wdb,'\n')))
 if not hm_cutoff:
    for x in outliers_hb[0]:
        sth,mh = map(str,list(x))
