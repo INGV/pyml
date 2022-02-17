@@ -186,11 +186,12 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
                 Ml_Medi = False
                 Ml_ns = False
                 condition='emptyset'
+             w = numpy.ones(Ml_ns_start)
           if deltaMean <= stop or N == maxit:
              finished = True
              Ml_ns = len(m)
              condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
-    return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed
+    return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed,w
 
 ###### End of Functions ##########
 ## Main ##
@@ -396,28 +397,31 @@ meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
 meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
-ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
+ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
 meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
-ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
+ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 # Now closing all output files
-for x, y in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta):
+for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weights_db):
     sth,mh = map(str,x)
     std,md = map(str,y)
-    magnitudes_out.write(' '.join(('MLSTA',sth,mh,std,md,'\n')))
-for x in outliers_hb[0]:
-    sth,mh = map(str,list(x))
-    magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
-for y in outliers_db[0]:
-    std,md = map(str,list(y))
-    magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
+    whb = str(wx)
+    wdb = str(wy)
+    magnitudes_out.write(' '.join(('MLSTA',sth,mh,whb,std,md,wdb'\n')))
+if not hm_cutoff:
+   for x in outliers_hb[0]:
+       sth,mh = map(str,list(x))
+       magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
+   for y in outliers_db[0]:
+       std,md = map(str,list(y))
+       magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
 magnitudes_out.close()
 log_out.close()
 sys.exit()
