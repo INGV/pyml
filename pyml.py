@@ -156,43 +156,39 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
     s=magnitudes_sta
     finished = False
     N = 0
-    Ml_Mean = numpy.mean(m)
-    #Ml_Std  = numpy.std(m)
     Ml_Std  = scipy.stats.median_abs_deviation(m)
     Ml_Medi = numpy.median(m)
     Ml_ns_start = len(m)
     removed=[]
-    print(hm_cutoff)
     while not finished:
           N = N + 1
           Ml_Medi_old = Ml_Medi
           distance_from_mean = abs(m - Ml_Medi)
-          print(Ml_Medi)
           if hm_cutoff:
              w = numpy.asfarray(list(filter(lambda x: 1.0 if (x <= hm_cutoff) else hm_cutoff/x,m))) # Values beyond cutoff are downweighted
              Ml_Medi = numpy.sum(m * w)/numpy.sum(w)
-          print(Ml_Medi)
-          not_outlier = distance_from_mean < max_dev * Ml_Std
-          yes_outlier = distance_from_mean >= max_dev * Ml_Std
-          removed.append(list(zip(s[yes_outlier],m[yes_outlier])))
-          m = m[not_outlier]
-          s = s[not_outlier]
-          if len(m) > 0:
-             Ml_Mean = numpy.mean(m)
-             #Ml_Std  = numpy.std(m)
-             Ml_Std  = scipy.stats.median_abs_deviation(m)
-             Ml_Medi = numpy.median(m)
              deltaMean = abs(Ml_Medi-Ml_Medi_old)
-             if deltaMean <= stop or N == maxit:
+          print(Ml_Medi_old,Ml_Medi,deltaMean)
+          if not hm_cutoff:
+             not_outlier = distance_from_mean < max_dev * Ml_Std
+             yes_outlier = distance_from_mean >= max_dev * Ml_Std
+             removed.append(list(zip(s[yes_outlier],m[yes_outlier])))
+             m = m[not_outlier]
+             s = s[not_outlier]
+             if len(m) > 0:
+                Ml_Std  = scipy.stats.median_abs_deviation(m)
+                Ml_Medi = numpy.median(m)
+                deltaMean = abs(Ml_Medi-Ml_Medi_old)
+             else:
                 finished = True
-                Ml_ns = len(m)
-                condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
-          else:
+                Ml_Std  = False
+                Ml_Medi = False
+                Ml_ns = False
+                condition='emptyset'
+          if deltaMean <= stop or N == maxit:
              finished = True
-             Ml_Std  = False
-             Ml_Medi = False
-             Ml_ns = False
-             condition='emptyset'
+             Ml_ns = len(m)
+             condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
     return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed
 
 ###### End of Functions ##########
