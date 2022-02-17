@@ -167,9 +167,11 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
           N = N + 1
           Ml_Medi_old = Ml_Medi
           distance_from_mean = abs(m - Ml_Medi)
+          print(Ml_Medi)
           if hm_cutoff:
              w = numpy.asfarray(list(filter(lambda x: 1.0 if (x <= hm_cutoff) else hm_cutoff/x,m))) # Values beyond cutoff are downweighted
-             print(w)
+             Ml_Medi = numpy.sum(m * w)/numpy.sum(w)
+          print(Ml_Medi)
           not_outlier = distance_from_mean < max_dev * Ml_Std
           yes_outlier = distance_from_mean >= max_dev * Ml_Std
           removed.append(list(zip(s[yes_outlier],m[yes_outlier])))
