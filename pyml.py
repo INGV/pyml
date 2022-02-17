@@ -150,8 +150,8 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
         else:
            log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
     return meanmag_ml_set,meanamp_ml_set
-           
-def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev):
+
+def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
     m=numpy.array(magnitudes)
     s=magnitudes_sta
     finished = False
@@ -160,22 +160,19 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev):
     #Ml_Std  = numpy.std(m)
     Ml_Std  = scipy.stats.median_abs_deviation(m)
     Ml_Medi = numpy.median(m)
-    #print "--- Before Outliers Removal ---"
-    #print Ml_Mean
-    #print Ml_Std
-    #print Ml_Medi
     Ml_ns_start = len(m)
     removed=[]
     while not finished:
           N = N + 1
           Ml_Medi_old = Ml_Medi
           distance_from_mean = abs(m - Ml_Medi)
-          not_outlier = distance_from_mean < max_dev * Ml_Medi
-          yes_outlier = distance_from_mean >= max_dev * Ml_Medi
+          if hm_cutoff:
+             w = numpy.asfarray(list(filter((lambda x: 1.0 if (x <= cutoff) else hm_cutoff/x,m)))) # Values beyond cutoff are downweighted
+          not_outlier = distance_from_mean < max_dev * Ml_Std
+          yes_outlier = distance_from_mean >= max_dev * Ml_Std
           removed.append(list(zip(s[yes_outlier],m[yes_outlier])))
           m = m[not_outlier]
           s = s[not_outlier]
-          #m = numpy.asfarray(list(filter((lambda x: abs(x - Ml_Medi) <= Ml_Std ), m))) # Questa riga contiene la sintassi lambda (funzione anonima) che sostituisce la funzione drop_outliers ora commentata
           if len(m) > 0:
              Ml_Mean = numpy.mean(m)
              #Ml_Std  = numpy.std(m)
@@ -297,6 +294,11 @@ except:
    log_out.write("No parameter 'maxdist' in section 'event_magnitude' of config file")
    sys.exit()
 try:
+   hm_cutoff=eval(event_magnitude_parameters['hm_cutoff'])
+except:
+   log_out.write("No parameter 'hm_cutoff' in section 'event_magnitude' of config file")
+   sys.exit()
+try:
    outliers_max_it=int(event_magnitude_parameters['outliers_max_it'])
 except:
    log_out.write("No parameter 'outliers_max_it' in section 'event_magnitude' of config file")
@@ -393,14 +395,14 @@ meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
 meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
-ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd)
+ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
 meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
-ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd)
+ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
