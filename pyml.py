@@ -151,7 +151,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
            log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
     return meanmag_ml_set,meanamp_ml_set
 
-def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
+def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,hm_cutoff):
     m=numpy.array(magnitudes)
     s=magnitudes_sta
     finished = False
@@ -174,8 +174,9 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
              deltaMean = abs(Ml_Medi-Ml_Medi_old)
              Ml_Std=0.0
           if not hm_cutoff:
-             not_outlier = distance_from_mean < max_dev * Ml_Std
-             yes_outlier = distance_from_mean >= max_dev * Ml_Std
+             cut_limit = max_dev * Ml_Std if (max_dev * Ml_Std) > out_cutoff else out_cutoff
+             not_outlier = distance_from_mean < cut_limit
+             yes_outlier = distance_from_mean >= cut_limit
              removed.append(list(zip(s[yes_outlier],m[yes_outlier])))
              m = m[not_outlier]
              s = s[not_outlier]
@@ -319,6 +320,11 @@ try:
 except:
    log_out.write("No parameter 'outliers_nstd' in section 'event_magnitude' of config file")
    sys.exit()
+try:
+   outliers_cutoff=float(event_magnitude_parameters['outliers_cutoff'])
+except:
+   log_out.write("No parameter 'outliers_cutoff' in section 'event_magnitude' of config file")
+   sys.exit()
 cmp_keys=set()
 components_N={}
 components_E={}
@@ -401,14 +407,14 @@ meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
 meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
-ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
+ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
 meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
-ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,hm_cutoff)
+ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
