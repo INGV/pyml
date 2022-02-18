@@ -168,6 +168,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
        print(w)
        Ml_Medi = numpy.sum(m * w)/numpy.sum(w)
        Ml_Std=0.0
+       condition='whuber'
     if not hm_cutoff:
        while not finished:
              N = N + 1
