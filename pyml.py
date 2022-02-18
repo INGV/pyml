@@ -152,11 +152,11 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
     return meanmag_ml_set,meanamp_ml_set
 
 def whuber(res,ruse):
-       with numpy.errstate(divide='ignore'):
-            w = numpy.where(res <= ruse,1.0,ruse/res)
-       wmean = numpy.sum(m * w)/numpy.sum(w)
-       wstd = 0.0
-       flag = 'whuber'
+    with numpy.errstate(divide='ignore'):
+         w = numpy.where(res <= ruse,1.0,ruse/res)
+    wmean = numpy.sum(m * w)/numpy.sum(w)
+    wstd = 0.0
+    flag = 'whuber'
     return wmean,wstd,flag
 
 def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,hm_cutoff):
