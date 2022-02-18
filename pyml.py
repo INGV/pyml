@@ -182,6 +182,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
              if len(m) > 0:
                 Ml_Std  = scipy.stats.median_abs_deviation(m)
                 Ml_Medi = numpy.median(m)
+                Ml_ns = len(m)
                 deltaMean = abs(Ml_Medi-Ml_Medi_old)
              else:
                 finished = True
@@ -190,10 +191,9 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
                 Ml_ns = False
                 condition='emptyset'
              w = numpy.ones(Ml_ns_start)
-             print(N,Ml_Medi_old,Ml_Medi,deltaMean,stop)
+             print(N,Ml_Medi_old,Ml_Medi,deltaMean,stop,Ml_ns)
              if deltaMean <= stop or N == maxit:
                 finished = True
-                Ml_ns = len(m)
                 condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
     return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed,w
 
