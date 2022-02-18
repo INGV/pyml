@@ -167,7 +167,6 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
        print(distance_from_mean)
        print(w)
        Ml_Medi = numpy.sum(m * w)/numpy.sum(w)
-       deltaMean = abs(Ml_Medi-Ml_Medi_old)
        Ml_Std=0.0
     if not hm_cutoff:
        while not finished:
