@@ -195,6 +195,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
              if deltaMean <= stop or N == maxit:
                 finished = True
                 condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
+    Ml_ns = len(m)
     return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed,w
 
 ###### End of Functions ##########
