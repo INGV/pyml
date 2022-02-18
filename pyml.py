@@ -154,7 +154,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
 def whuber(val,res,ruse):
     with numpy.errstate(divide='ignore'):
          w = numpy.where(res <= ruse,1.0,ruse/res)
-    wmean = numpy.sum(m * w)/numpy.sum(w)
+    wmean = numpy.sum(val * w)/numpy.sum(w)
     wstd = 0.0
     flag = 'whuber'
     return wmean,wstd,flag
