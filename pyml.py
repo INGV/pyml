@@ -165,7 +165,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,hm_cutoff):
           Ml_Medi_old = Ml_Medi
           distance_from_mean = abs(m - Ml_Medi)
           if hm_cutoff:
-             w = numpy.asarray(list(filter(lambda x: 1.0 if x <= hm_cutoff else (hm_cutoff/x),list(distance_from_mean)))) # Values beyond cutoff are downweighted
+             w = numpy.asarray(list(filter(lambda x: 1.0 if x <= float(hm_cutoff) else (float(hm_cutoff)/x),list(distance_from_mean)))) # Values beyond cutoff are downweighted
              print("Stampeso su Media",str(Ml_Medi))
              print(distance_from_mean)
              print(w)
