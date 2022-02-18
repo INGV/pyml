@@ -151,19 +151,52 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
            log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
     return meanmag_ml_set,meanamp_ml_set
 
+def wstd(v,wm,wf):
+    s = 0.0
+    return s 
+
 def whuber(val,res,ruse):
     with numpy.errstate(divide='ignore'):
          w = numpy.where(res <= ruse,1.0,ruse/res)
-    wmean = numpy.sum(val * w)/numpy.sum(w)
-    wstd = 0.0
+    w_mean = numpy.sum(val * w)/numpy.sum(w)
+    w_std = wstd(val,wmean,w)
     flag = 'whuber'
-    return wmean,wstd,w,flag
+    return w_mean,w_std,w,flag
+
+def rm_outliers(v,v_flag,v_mean,v_std,finished,m_d,v_res,co,var_stop,it_max,skip):
+    n = 0
+    w_fake = numpy.ones(v)
+    while not finished:
+          n = n + 1
+          v_mean_old = v_mean
+          cut_limit = m_d * v_std if (m_d * v_std) > co else co
+          not_outlier = v_res  < cut_limit
+          yes_outlier = v_res >= cut_limit
+          skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
+          v = v[not_outlier]
+          v_flag = v_flag[not_outlier]
+          if len(v) > 0:
+             v_std  = scipy.stats.median_abs_deviation(v)
+             v_mean = numpy.median(v)
+             n_v_flag = len(v)
+             mean_var = abs(v_mean-v_mean_old)
+          else:
+             finished = True
+             v_std  = False
+             v_mean = False
+             n_v_flag = False
+             whystop = 'emptyset'
+          v_res = abs(v - v_mean)
+          print(n,v_mean_old,v_mean,mean_var,n_v_flag)
+          if mean_var <= var_stop or n == it_max:
+             finished = True
+             whystop='deltaMean:'+str(mean_var)+':'+str(n) if mean_var <= var_stop else 'maxit'
+    return v_mean,v_std,v,whystop,w_fake,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,hm_cutoff):
     m=numpy.array(magnitudes)
     s=magnitudes_sta
     finished = False
-    N = 0
     Ml_Std  = scipy.stats.median_abs_deviation(m)
     Ml_Medi = numpy.median(m)
     Ml_ns_start = len(m)
@@ -172,32 +205,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
     if hm_cutoff:
        Ml_Medi,Ml_Std,weights,condition = whuber(m,distance_from_mean,hm_cutoff)
     else:
-       while not finished:
-             N = N + 1
-             Ml_Medi_old = Ml_Medi
-             distance_from_mean = abs(m - Ml_Medi)
-             cut_limit = max_dev * Ml_Std if (max_dev * Ml_Std) > out_cutoff else out_cutoff
-             not_outlier = distance_from_mean < cut_limit
-             yes_outlier = distance_from_mean >= cut_limit
-             removed.append(list(zip(s[yes_outlier],m[yes_outlier])))
-             m = m[not_outlier]
-             s = s[not_outlier]
-             if len(m) > 0:
-                Ml_Std  = scipy.stats.median_abs_deviation(m)
-                Ml_Medi = numpy.median(m)
-                Ml_ns = len(m)
-                deltaMean = abs(Ml_Medi-Ml_Medi_old)
-             else:
-                finished = True
-                Ml_Std  = False
-                Ml_Medi = False
-                Ml_ns = False
-                condition='emptyset'
-             weights = numpy.ones(Ml_ns_start)
-             print(N,Ml_Medi_old,Ml_Medi,deltaMean,stop,Ml_ns)
-             if deltaMean <= stop or N == maxit:
-                finished = True
-                condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
+       Ml_Medi,Ml_Std,m,condition,weights,removed = rm_outliers(m,s,Ml_Medi,Ml_Std,finished,max_dev,distance_from_mean,out_cutoff,stop,maxit,removed)
     Ml_ns = len(m)
     return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed,weights
 
