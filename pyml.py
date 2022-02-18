@@ -165,7 +165,7 @@ def whuber(val,res,ruse):
 
 def rm_outliers(v,v_flag,v_mean,v_std,finished,m_d,v_res,co,var_stop,it_max,skip):
     n = 0
-    w_fake = numpy.ones(v)
+    w_fake = numpy.ones(len(v))
     while not finished:
           n = n + 1
           v_mean_old = v_mean
