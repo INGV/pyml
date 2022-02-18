@@ -151,15 +151,40 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
            log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
     return meanmag_ml_set,meanamp_ml_set
 
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+# Calculating the weighted standard deviation
+#         from SUBROUTINE MEDIA_HUBER Programmed on 1 september 2003 by Franco Mele (INGV)
+# Formula is: 
+#           ___N
+#           \                    2
+#            \      Wi(Xi - Xmed)
+#            /
+#           /__i=1
+# SQRT(  ------------------------------------- )
+#
+#              N'-1     __N
+#              ----- (  \     Wi )
+#                N'     /_i=1
+#
+#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 def wstd(v,wm,wf):
-    s = 0.0
-    return s 
+    eps2=5.0e-6
+    if len(v) <= 1:
+       wsd = False
+    else:
+       wsd = numpy.sum(wf*(v-wm)^2)
+       fac = ((len(v)-1)/len(v))*numpy.sum(wf)
+       wsd = wsd / max(fac,eps2)
+       wsd = math.sqrt(max(wsd,eps2)
+       #not_null = len(numpy.where(wm > eps2))
+    return wsd 
 
 def whuber(val,res,ruse):
     with numpy.errstate(divide='ignore'):
          w = numpy.where(res <= ruse,1.0,ruse/res)
     w_mean = numpy.sum(val * w)/numpy.sum(w)
     w_std = wstd(val,wmean,w)
+    w_std = 0.0 if not w_std else w_std
     flag = 'whuber'
     return w_mean,w_std,w,flag
 
