@@ -172,8 +172,6 @@ def wstd(v,wm,wf):
     if len(v) <= 1:
        wsd = False
     else:
-       print(wf)
-       print(v-wm)
        wsd = numpy.sum(wf*numpy.square((v-wm)))
        fac = ((len(v)-1)/len(v))*numpy.sum(wf)
        wsd = wsd / max(fac,eps2)
