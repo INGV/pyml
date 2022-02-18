@@ -183,7 +183,7 @@ def whuber(val,res,ruse):
     with numpy.errstate(divide='ignore'):
          w = numpy.where(res <= ruse,1.0,ruse/res)
     w_mean = numpy.sum(val * w)/numpy.sum(w)
-    w_std = wstd(val,wmean,w)
+    w_std = wstd(val,w_mean,w)
     w_std = 0.0 if not w_std else w_std
     flag = 'whuber'
     return w_mean,w_std,w,flag
