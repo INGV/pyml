@@ -157,7 +157,7 @@ def whuber(val,res,ruse):
     wmean = numpy.sum(val * w)/numpy.sum(w)
     wstd = 0.0
     flag = 'whuber'
-    return wmean,wstd,flag
+    return wmean,wstd,w,flag
 
 def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,hm_cutoff):
     m=numpy.array(magnitudes)
@@ -170,7 +170,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
     removed=[]
     distance_from_mean = abs(m - Ml_Medi)
     if hm_cutoff:
-       Ml_Medi,Ml_Std,condition = whuber(m,distance_from_mean,hm_cutoff)
+       Ml_Medi,Ml_Std,weights,condition = whuber(m,distance_from_mean,hm_cutoff)
     else:
        while not finished:
              N = N + 1
@@ -193,13 +193,13 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
                 Ml_Medi = False
                 Ml_ns = False
                 condition='emptyset'
-             w = numpy.ones(Ml_ns_start)
+             weights = numpy.ones(Ml_ns_start)
              print(N,Ml_Medi_old,Ml_Medi,deltaMean,stop,Ml_ns)
              if deltaMean <= stop or N == maxit:
                 finished = True
                 condition='deltaMean:'+str(deltaMean)+':'+str(N) if deltaMean <= stop else 'maxit'
     Ml_ns = len(m)
-    return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed,w
+    return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed,weights
 
 ###### End of Functions ##########
 ## Main ##
