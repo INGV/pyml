@@ -162,7 +162,8 @@ def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,h
     removed=[]
     distance_from_mean = abs(m - Ml_Medi)
     if hm_cutoff:
-       w = numpy.where(distance_from_mean <= hm_cutoff,1.0,hm_cutoff/distance_from_mean)
+       with numpy.errstate(divide='ignore'):
+            w = numpy.where(distance_from_mean <= hm_cutoff,1.0,hm_cutoff/distance_from_mean)
        print("Stampeso su Media",str(Ml_Medi))
        print(distance_from_mean)
        print(w)
