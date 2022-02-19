@@ -176,7 +176,7 @@ def wstd(v,wm,wf):
        #print(type(stack[:,0]))
        #print(type(stack[:,1]))
        #wsd = numpy.sum(numpy.where(stack[:,0] > eps2,stack[:,0]*numpy.square((stack[:,1]-wm))))
-       index_not_zero = numpy.where(wf > eps2)
+       index_not_zero = numpy.where(wf > eps2)[0][0]
        wf_nz = wf(index_not_zero)
        v_nz  = v(index_not_zero)
        wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm)))
