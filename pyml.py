@@ -190,14 +190,13 @@ def whuber(v,w_mean,ruse):
     w_mean = numpy.sum(v * w)/numpy.sum(w)
     w_std = wstd(v,w_mean,w)
     w_std = 0.0 if not w_std else w_std
-    flag = 'whuber'
-    return w_mean,w_std,w,flag
+    return w_mean,w_std,w
 
-def rm_outliers(v,v_flag,v_mean,v_std,finished,m_d,v_res,co,var_stop,it_max,skip):
+def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
     w_fake = numpy.ones(len(v))
     res = abs(v - xmd)
     v_mean_old = v_mean
-    cut_limit = m_d * v_std if (m_d * v_std) > co else co
+    cut_limit = times_std * v_std if (times_std * v_std) > co else co
     not_outlier = v_res  < cut_limit
     yes_outlier = v_res >= cut_limit
     skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
@@ -207,16 +206,11 @@ def rm_outliers(v,v_flag,v_mean,v_std,finished,m_d,v_res,co,var_stop,it_max,skip
        v_std  = scipy.stats.median_abs_deviation(v)
        v_mean = numpy.median(v)
        n_v_flag = len(v)
-       mean_var = abs(v_mean-v_mean_old)
     else:
-       finished = True
        v_std  = False
        v_mean = False
        n_v_flag = False
-       whystop = 'emptyset'
-    v_res = abs(v - v_mean)
-    print(n,v_mean_old,v_mean,mean_var,n_v_flag)
-    return v_mean,v_std,v,whystop,w_fake,skip
+    return v_mean,v_std,v,w_fake,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
     v = numpy.array(magnitudes)
@@ -234,14 +228,19 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     while not finished:
           if hm_cutoff:
              amd = xmd
-             xmd,xmd_std,weights,typemean = whuber(v,xmd,ruse)
+             xmd,xmd_std,weights = whuber(v,xmd,ruse)
+             typemean = 'whuber'
           else:
-             Ml_Medi,Ml_Std,m,typemean,weights,removed = rm_outliers(m,s,Ml_Medi,Ml_Std,finished,max_dev,distance_from_mean,out_cutoff,stop,maxit,removed)
+             xmd,xmd_std,v,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
+             typemean = 'rmoutl'
           xmd_var = abs(amd-xmd)
           print(xmd,xmd_std,typemean,xmd_var,n)
-          if xmd_var <= var_stop or n == it_max:
+          if xmd_var <= var_stop:
              finished = True
-             whystop=typemean+'deltaMean:'+str(xmd_var)+':'+str(n) if xmd_var <= var_stop else 'maxit'+str(n)
+             whystop=typemean+'_varstop='+str(xmd_var)+'_n='+str(n)
+          elif n == it_max:
+             finished = True
+             whystop=typemean+'_maxit='+str(n)+'_xmdvar='+str(xmd_var)
           n += 1
     vlen_stop = len(v)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights
