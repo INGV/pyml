@@ -226,8 +226,8 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     finished = False
     removed=[]
     while not finished:
+          amd = xmd
           if hm_cutoff:
-             amd = xmd
              xmd,xmd_std,weights = whuber(v,xmd,ruse)
              typemean = 'whuber'
           else:
