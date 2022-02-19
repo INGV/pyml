@@ -181,7 +181,6 @@ def wstd(v,wm,wf):
        fac = ((len(wf_nz)-1)/len(wf_nz))*numpy.sum(wf_nz)
        wsd = wsd / max(fac,eps2)
        wsd = math.sqrt(max(wsd,eps2))
-       #not_null = len(numpy.where(wm > eps2))
     return wsd 
 
 def whuber(v,w_mean,ruse):
@@ -239,6 +238,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
           else:
              Ml_Medi,Ml_Std,m,typemean,weights,removed = rm_outliers(m,s,Ml_Medi,Ml_Std,finished,max_dev,distance_from_mean,out_cutoff,stop,maxit,removed)
           xmd_var = abs(amd-xmd)
+          print(xmd,xmd_std,typemean,xmd_var,n)
           if xmd_var <= var_stop or n == it_max:
              finished = True
              whystop=typemean+'deltaMean:'+str(xmd_var)+':'+str(n) if xmd_var <= var_stop else 'maxit'+str(n)
