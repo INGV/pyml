@@ -173,8 +173,6 @@ def wstd(v,wm,wf):
        wsd = False
     else:
        index_not_zero = numpy.where(wf > eps2)[0]
-       print(wf)
-       print(index_not_zero)
        wf_nz = wf[index_not_zero]
        v_nz  = v[index_not_zero]
        wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm)))
