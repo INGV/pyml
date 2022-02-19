@@ -231,7 +231,8 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              xmd,xmd_std,weights = whuber(v,xmd,ruse)
              typemean = 'whuber'
           else:
-             xmd,xmd_std,v,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
+             xmd,xmd_std,vv,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
+             v = vv
              typemean = 'rmoutl'
           xmd_var = abs(amd-xmd)
           print(xmd,xmd_std,typemean,xmd_var,n)
