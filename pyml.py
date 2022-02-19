@@ -3,21 +3,37 @@
 # PyML reads in pyamp_amplitudes.csv or the same data from a MySQL table and
 # - calculates channel ML on all the three components
 # - calculates event ML when a set of waveform (of one single event) is given
+#    
+# Amplitude usage
+#    Two different approaches are followed to calculate the station ML:
+#    - the mean of the maximum amplitudes N and E is used in the attenuation law to get the station ML
+#    - the mean of the N and E ML is performed to give the station ML
+#    The second method is at present commented out
+
 # Attenuation Law
 #    PyML implemets two different attenuation laws for the ML calculation:
 #    - INGV Hutton & Boore which is mutuated by the one formerly used at USGS for the 
 #      adapted to the Italian region with no stations corrections
 #    - M. Di Bona attenuation law calculated specifically for the Italian region
-#      with stations corrections
+#      with stations corrections at 400 stations (Di Bona 1-199 and Mele-Quintiliani 200-400)
 #
-# Outliers removal
-#    In ML calculation outliers are removed by a recursive calculation of the mean, median and 
-#    standard deviation
-#    
-# ML calculation
-#    Two different approaches are followed to calculate the station ML:
-#    - the mean of the maximum amplitudes N and E is used in the attenuation law to get the station ML
-#    - the mean of the N and E ML is performed to give the station ML
+# Mean ML Value and Standard deviation calculation
+#    Two alternative, both iterative, approaches can be used 
+#    Both methods start from the median and not from the mean for robustness, then they diverge from each other
+#    1) Outliers removal (weighting function is not applied or it can considered to be 0 for outlier and 1 for the rest)
+#       Parameters are taken from the .conf file:
+#       - outliers_nstd: how many time (outliers_nstd*standarddev) must be used to cut out the outliers
+#       - outliers_cutoff: a lower limit to the outliers_nstd*standarddev value
+#       - outliers_red_stop: stops iterations when abs(mean_old-updated_mean)) is lower than outliers_red_stop
+#       - outliers_max_it: after this value iterations it stops iterating anyway (no convergence); this value is also used in the other method
+#    2) Weighted Huber Mean
+#       after the preliminary median calculation this approach calculates it's own weighted mean value and standard deviation
+#       Parameters are taken from the .conf file:
+#       - outliers_max_it: same as the other
+#       - hm_cutoff: this is the corner of the downweighting function; whatever is inside +/- hm_cutoff from the (updated) weighted mean has weight 1.0,
+#         the rest is downweighted as hm_cutoff/(distance_from_the_mean)
+#    In both cases stations with hypocentral distance lower than mindist (tipically 10km) and higher than maxdist (tipically 600) are excluded
+#
 
 import argparse,sys,os,glob,copy,pwd,pathlib,itertools
 import geographiclib
@@ -232,7 +248,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              xmd,xmd_std,v,s,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
              typemean = 'rmoutl'
           xmd_var = abs(amd-xmd)
-          print(xmd,xmd_std,typemean,xmd_var,n)
+          #print(xmd,xmd_std,typemean,xmd_var,n)
           if xmd_var <= var_stop:
              finished = True
              whystop=typemean+'_varstop='+str(xmd_var)+'_n='+str(n)
@@ -448,7 +464,7 @@ for index, row in dfa.iterrows():
 
 magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
 # Hutton and Boore
-print("Hutton and Boore")
+#print("Hutton and Boore")
 meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
@@ -456,7 +472,7 @@ meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=obj
 ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
-print("Di Bona")
+#print("Di Bona")
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
 meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
@@ -465,8 +481,6 @@ ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
-# Now closing all output files
-#print(weights_hb)
 for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weights_db):
     sth,mh = map(str,x)
     std,md = map(str,y)
@@ -480,6 +494,7 @@ if not hm_cutoff:
    for y in outliers_db[0]:
        std,md = map(str,list(y))
        magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
+# Now closing all output files
 magnitudes_out.close()
 log_out.close()
 sys.exit()
