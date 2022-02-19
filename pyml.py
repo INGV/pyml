@@ -172,7 +172,7 @@ def wstd(v,wm,wf):
     if len(v) <= 1:
        wsd = False
     else:
-       stack = numpy.stack(wf,v)
+       stack = numpy.stack((wf,v))
        print(stack)
        wsd = numpy.sum(numpy.where(stack[:,0] > eps2,stack[:,0]*numpy.square((stack[:,1]-wm))))
        #wsd = numpy.sum(wf*numpy.square((v-wm)))
