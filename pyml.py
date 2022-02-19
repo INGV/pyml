@@ -179,7 +179,7 @@ def wstd(v,wm,wf):
        index_not_zero = numpy.where(wf > eps2)
        wf_nz = wf(index_not_zero)
        v_nz  = v(index_not_zero)
-       wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm))))
+       wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm)))
        #wsd = numpy.sum(wf*numpy.square((v-wm)))
        #wf2 = numpy.where(wf > eps2)
        fac = ((len(wf_nz)-1)/len(wf_nz))*numpy.sum(wf_nz)
