@@ -172,13 +172,17 @@ def wstd(v,wm,wf):
     if len(v) <= 1:
        wsd = False
     else:
-       stack = numpy.stack((wf,v),axis=1)
-       print(type(stack[:,0]))
-       print(type(stack[:,1]))
-       wsd = numpy.sum(numpy.where(stack[:,0] > eps2,stack[:,0]*numpy.square((stack[:,1]-wm))))
+       #stack = numpy.stack((wf,v),axis=1)
+       #print(type(stack[:,0]))
+       #print(type(stack[:,1]))
+       #wsd = numpy.sum(numpy.where(stack[:,0] > eps2,stack[:,0]*numpy.square((stack[:,1]-wm))))
+       index_not_zero = numpy.where(wf > eps2)
+       wf_nz = wf(index_not_zero)
+       v_nz  = v(index_not_zero)
+       wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm))))
        #wsd = numpy.sum(wf*numpy.square((v-wm)))
-       wf2 = numpy.where(wf > eps2)
-       fac = ((len(wf2)-1)/len(wf2))*numpy.sum(wf2)
+       #wf2 = numpy.where(wf > eps2)
+       fac = ((len(wf_nz)-1)/len(wf_nz))*numpy.sum(wf_nz)
        wsd = wsd / max(fac,eps2)
        wsd = math.sqrt(max(wsd,eps2))
        #not_null = len(numpy.where(wm > eps2))
