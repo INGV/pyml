@@ -197,8 +197,8 @@ def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
     res = abs(v - v_mean)
     v_mean_old = v_mean
     cut_limit = times_std * v_std if (times_std * v_std) > co else co
-    not_outlier = v_res  < cut_limit
-    yes_outlier = v_res >= cut_limit
+    not_outlier = res  < cut_limit
+    yes_outlier = res >= cut_limit
     skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
     v = v[not_outlier]
     v_flag = v_flag[not_outlier]
