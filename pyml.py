@@ -178,68 +178,73 @@ def wstd(v,wm,wf):
        wf_nz = wf[index_not_zero]
        v_nz  = v[index_not_zero]
        wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm)))
-       #wsd = numpy.sum(wf*numpy.square((v-wm)))
-       #wf2 = numpy.where(wf > eps2)
        fac = ((len(wf_nz)-1)/len(wf_nz))*numpy.sum(wf_nz)
        wsd = wsd / max(fac,eps2)
        wsd = math.sqrt(max(wsd,eps2))
        #not_null = len(numpy.where(wm > eps2))
     return wsd 
 
-def whuber(val,res,ruse):
+def whuber(v,w_mean,ruse):
+    res = abs(v - w_mean)
     with numpy.errstate(divide='ignore'):
          w = numpy.where(res <= ruse,1.0,ruse/res)
-    w_mean = numpy.sum(val * w)/numpy.sum(w)
-    w_std = wstd(val,w_mean,w)
+    w_mean = numpy.sum(v * w)/numpy.sum(w)
+    w_std = wstd(v,w_mean,w)
     w_std = 0.0 if not w_std else w_std
     flag = 'whuber'
     return w_mean,w_std,w,flag
 
 def rm_outliers(v,v_flag,v_mean,v_std,finished,m_d,v_res,co,var_stop,it_max,skip):
-    n = 0
     w_fake = numpy.ones(len(v))
-    while not finished:
-          n = n + 1
-          v_mean_old = v_mean
-          cut_limit = m_d * v_std if (m_d * v_std) > co else co
-          not_outlier = v_res  < cut_limit
-          yes_outlier = v_res >= cut_limit
-          skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
-          v = v[not_outlier]
-          v_flag = v_flag[not_outlier]
-          if len(v) > 0:
-             v_std  = scipy.stats.median_abs_deviation(v)
-             v_mean = numpy.median(v)
-             n_v_flag = len(v)
-             mean_var = abs(v_mean-v_mean_old)
-          else:
-             finished = True
-             v_std  = False
-             v_mean = False
-             n_v_flag = False
-             whystop = 'emptyset'
-          v_res = abs(v - v_mean)
-          print(n,v_mean_old,v_mean,mean_var,n_v_flag)
-          if mean_var <= var_stop or n == it_max:
-             finished = True
-             whystop='deltaMean:'+str(mean_var)+':'+str(n) if mean_var <= var_stop else 'maxit'
+    res = abs(v - xmd)
+    v_mean_old = v_mean
+    cut_limit = m_d * v_std if (m_d * v_std) > co else co
+    not_outlier = v_res  < cut_limit
+    yes_outlier = v_res >= cut_limit
+    skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
+    v = v[not_outlier]
+    v_flag = v_flag[not_outlier]
+    if len(v) > 0:
+       v_std  = scipy.stats.median_abs_deviation(v)
+       v_mean = numpy.median(v)
+       n_v_flag = len(v)
+       mean_var = abs(v_mean-v_mean_old)
+    else:
+       finished = True
+       v_std  = False
+       v_mean = False
+       n_v_flag = False
+       whystop = 'emptyset'
+    v_res = abs(v - v_mean)
+    print(n,v_mean_old,v_mean,mean_var,n_v_flag)
     return v_mean,v_std,v,whystop,w_fake,skip
 
-def calculate_event_ml(magnitudes,magnitudes_sta,maxit,stop,max_dev,out_cutoff,hm_cutoff):
-    m=numpy.array(magnitudes)
-    s=magnitudes_sta
+def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
+    v = numpy.array(magnitudes)
+    s = magnitudes_sta
+    ruse = hm_cutoff
+    # Calculate starting values from m (magnitudes) vector
+    # We here use a median and mad instead of the mean and std as stating values because they are more robust
+    # Names are taken from Huber Mean routine by Franco Mele for coherence
+    xmd = numpy.median(m)
+    xmd_std  = scipy.stats.median_abs_deviation(v)
+    vlen_start = len(v)
+    n = 1
     finished = False
-    Ml_Std  = scipy.stats.median_abs_deviation(m)
-    Ml_Medi = numpy.median(m)
-    Ml_ns_start = len(m)
     removed=[]
-    distance_from_mean = abs(m - Ml_Medi)
-    if hm_cutoff:
-       Ml_Medi,Ml_Std,weights,condition = whuber(m,distance_from_mean,hm_cutoff)
-    else:
-       Ml_Medi,Ml_Std,m,condition,weights,removed = rm_outliers(m,s,Ml_Medi,Ml_Std,finished,max_dev,distance_from_mean,out_cutoff,stop,maxit,removed)
-    Ml_ns = len(m)
-    return Ml_Medi,Ml_Std,Ml_ns_start,Ml_ns,condition,removed,weights
+    while not finished:
+          if hm_cutoff:
+             amd = xmd
+             xmd,xmd_std,weights,typemean = whuber(v,xmd,ruse)
+          else:
+             Ml_Medi,Ml_Std,m,typemean,weights,removed = rm_outliers(m,s,Ml_Medi,Ml_Std,finished,max_dev,distance_from_mean,out_cutoff,stop,maxit,removed)
+          xmd_var = abs(amd-xmd)
+          if xmd_var <= var_stop or n == it_max:
+             finished = True
+             whystop=typemean+'deltaMean:'+str(xmd_var)+':'+str(n) if xmd_var <= var_stop else 'maxit'+str(n)
+          n += 1
+    vlen_stop = len(v)
+    return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights
 
 ###### End of Functions ##########
 ## Main ##
