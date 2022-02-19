@@ -226,7 +226,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     # Calculate starting values from m (magnitudes) vector
     # We here use a median and mad instead of the mean and std as stating values because they are more robust
     # Names are taken from Huber Mean routine by Franco Mele for coherence
-    xmd = numpy.median(m)
+    xmd = numpy.median(v)
     xmd_std  = scipy.stats.median_abs_deviation(v)
     vlen_start = len(v)
     n = 1
