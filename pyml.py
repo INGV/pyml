@@ -210,7 +210,7 @@ def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
        v_std  = False
        v_mean = False
        n_v_flag = False
-    return v_mean,v_std,v_flag,v,w_fake,skip
+    return v_mean,v_std,v,v_flag,w_fake,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
     v = numpy.array(magnitudes)
