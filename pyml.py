@@ -198,9 +198,10 @@ def wstd(v,wm,wf):
     return wsd 
 
 def whuber(v,w_mean,ruse):
+    ruse,zero = map(float,ruse.split(',')) if len(ruse.split(',')) == 2 else [float(ruse),9999.0]
     res = abs(v - w_mean)
     with numpy.errstate(divide='ignore'):
-         w = numpy.where(res <= ruse,1.0,ruse/res)
+         w = numpy.where(res <= ruse,1.0,numpy.where(res > zero,0.0,ruse/res))
     w_mean = numpy.sum(v * w)/numpy.sum(w)
     w_std = wstd(v,w_mean,w)
     w_std = 0.0 if not w_std else w_std
