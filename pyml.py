@@ -197,8 +197,7 @@ def wstd(v,wm,wf):
        wsd = math.sqrt(max(wsd,eps2))
     return wsd 
 
-def whuber(v,w_mean,ruse):
-    ruse,zero = map(float,str(ruse).split(',')) if len(str(ruse).split(',')) == 2 else [ruse,9999.0]
+def whuber(v,w_mean,ruse,zero):
     res = abs(v - w_mean)
     with numpy.errstate(divide='ignore'):
          w = numpy.where(res <= ruse,1.0,numpy.where(res > zero,0.0,ruse/res))
@@ -240,10 +239,12 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     n = 1
     finished = False
     removed=[]
+    if hm_cutoff:
+       ruse,zero = map(float,str(ruse).split(',')) if len(str(ruse).split(',')) == 2 else [ruse,9999.0]
     while not finished:
           amd = xmd
           if hm_cutoff:
-             xmd,xmd_std,weights = whuber(v,xmd,ruse)
+             xmd,xmd_std,weights = whuber(v,xmd,ruse,zero)
              typemean = 'whuber'
           else:
              xmd,xmd_std,v,s,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
