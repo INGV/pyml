@@ -256,7 +256,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              finished = True
              whystop=typemean+'_maxit='+str(n)+'_xmdvar='+str(xmd_var)
           n += 1
-    vlen_stop = numpy.sum(weights)
+    vlen_stop = round(numpy.sum(weights),2)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights
 
 ###### End of Functions ##########
