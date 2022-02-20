@@ -240,7 +240,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     finished = False
     removed=[]
     if hm_cutoff:
-       ruse,zero = map(float,str(ruse).split(',')) if len(str(ruse).split(',')) == 2 else [ruse,9999.0]
+       ruse,zero = map(float,str(hm_cutoff).split(',')) if len(str(hm_cutoff).split(',')) == 2 else [hm_cutoff,9999.0]
     while not finished:
           amd = xmd
           if hm_cutoff:
