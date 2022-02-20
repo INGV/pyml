@@ -207,7 +207,6 @@ def whuber(v,w_mean,ruse):
     return w_mean,w_std,w
 
 def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
-    w_fake = numpy.ones(len(v))
     res = abs(v - v_mean)
     v_mean_old = v_mean
     cut_limit = times_std * v_std if (times_std * v_std) > co else co
@@ -224,6 +223,7 @@ def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
        v_std  = False
        v_mean = False
        n_v_flag = False
+    w_fake = numpy.ones(len(v))
     return v_mean,v_std,v,v_flag,w_fake,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
@@ -256,7 +256,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              finished = True
              whystop=typemean+'_maxit='+str(n)+'_xmdvar='+str(xmd_var)
           n += 1
-    vlen_stop = len(v)
+    vlen_stop = numpy.sum(weights)/len(weights)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights
 
 ###### End of Functions ##########
