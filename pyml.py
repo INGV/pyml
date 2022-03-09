@@ -75,6 +75,7 @@ def parseArguments():
         parser.add_argument('--infile',      default=None,          help='pyamp-amplitudes.csv file full path')
         parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event')
         parser.add_argument('--dbona_corr',  default='dbcor.csv',   help='Input file with DiBona Stations corrections')
+        parser.add_argument('--clipped_info',help='Input file with information on clipped channels')
         parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (see the example)')
         if len(sys.argv)==1:
             parser.print_help()
@@ -297,6 +298,8 @@ except Exception as e:
 
 #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
 dfa=pandas.read_csv(args.infile,sep=';',index_col=False)
+if args.clipped_info:
+   clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
 
 if magnitudes_out:
    magnitudes_out=open(magnitudes_out,'w')
@@ -406,8 +409,17 @@ else:
 km=1000.
 #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
 for index, row in dfa.iterrows():
+    net = str(row['Net'])
+    sta = str(row['Sta'])
+    loc = str(row['Loc'])
+    cha = str(row['Cha'])
     corner_low=float(row['LoCo'])
     corner_high=float(row['HiCo'])
+    if args.clipped_info:
+       clp=clip.loc[(clip['net'] == net) & (clip['sta'] == sta) & (clip['cha'] == cha)]
+       if not clp.empty:
+          log_out.write(' '.join(("Component skipped:",str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha'])," due to cliping\n")))
+          continue
     if corner_low >= max_lowcorner or (corner_high-corner_low) < delta_corner:
        log_out.write(' '.join(("Component skipped:",str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha']),str(corner_low),str(corner_high),"\n")))
        continue
