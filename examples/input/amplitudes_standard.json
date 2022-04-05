@@ -1,0 +1,75 @@
+{
+    "data": {
+        "conf": {
+            "iofilenames": {
+                "magnitudes": "pyml_magnitudes.csv",
+                "log": "pyml_general.log"
+            },
+            "preconditions": {
+                "theoretical_p": false,
+                "theoretical_s": true,
+                "delta_corner": 5.0,
+                "max_lowcorner": 15.0
+            },
+            "station_magnitude": {
+                "delta_peaks": 1.0,
+                "use_stcorr_hb": true,
+                "use_stcorr_db": true,
+                "when_no_stcorr_hb": true,
+                "when_no_stcorr_db": true
+            },
+            "event_magnitude": {
+                "mindist": 10,
+                "maxdist": 600,
+                "hm_cutoff": "0.3,1.0",
+                "outliers_max_it": 10,
+                "outliers_red_stop": 0.1,
+                "outliers_nstd": 1,
+                "outliers_cutoff": 0.1
+            }
+        },
+        "origin": {
+            "lat": 42,
+            "lon:": 12,
+            "depth": 10
+        },
+        "amplitudes": [
+            {
+                "net": "IV",
+                "sta": "ACER",
+                "cha": "HHZ",
+                "loc": "00",
+                "lat": 42,
+                "lon": 12,
+                "elev": 10,
+                "EpiDistance": 23,
+                "IpoDistance": 20,
+                "MinAmp": 100,
+                "MinAmpTime": "2020-01-01T00: 00: 00.000Z",
+                "MaxAmp": 100,
+                "MaxAmpTime": "2020-01-01T00: 00: 00.000Z",
+                "DeltaPeaks": 0.17,
+                "Method": "lmag",
+                "NoiseWinMin": "2017-01-01T00:01:35.070000Z",
+                "NoiseWinMax": "2017-01-01T00:01:40.070000Z",
+                "SignalWinMin": "2017-01-01T00:01:41.070000Z",
+                "SignalWinMax": "2017-01-01T00:01:47.360000Z",
+                "P_Pick": "2017-01-01T00:01:40.570000Z",
+                "Synth_P": 0,
+                "S_Picks": "2017-01-01T00:01:42.360000Z",
+                "Synth_S": 0,
+                "Nyq": 50.00000111758712,
+                "LoCo": 2,
+                "HiCo": 232,
+                "LenOverSNRIn": 26,
+                "SNRIn": 5.0,
+                "ML_H": 0.3891608063637402,
+                "CORR_HB": false,
+                "CORR_USED_HB": true,
+                "ML_DB": 0.09912164714874344,
+                "CORR_DB": 0.195,
+                "CORR_USED_DB": true
+            }
+        ]
+    }
+}
