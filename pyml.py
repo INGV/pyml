@@ -392,7 +392,7 @@ if not args.json:
    eventid=args.eventid
    dfa,clip,config = standard_pyml_load(infile,eventid,conf_file)
 else:
-   print("Uso il JSON")
+   print("Working on json input")
    json_in=pandas.read_json(args.json)
    dfa,config,origin = json_pyml_load(json_in)
    # Files out
