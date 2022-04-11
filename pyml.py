@@ -41,6 +41,7 @@ import pandas
 import numpy
 import math
 import scipy
+import json
 from pyrocko import cake
 from scipy import signal, stats
 from scipy.signal import butter, lfilter, freqz,find_peaks,detrend,welch,hilbert
@@ -72,11 +73,12 @@ class MyParser(argparse.ArgumentParser):
 
 def parseArguments():
         parser=MyParser()	
+        parser.add_argument('--json',        default=None,          help='json config and amplitudes file')
         parser.add_argument('--infile',      default=None,          help='pyamp-amplitudes.csv file full path')
         parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event')
+        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (see the example)')
         parser.add_argument('--dbona_corr',  default='dbcor.csv',   help='Input file with DiBona Stations corrections')
         parser.add_argument('--clipped_info',help='Input file with information on clipped channels')
-        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (see the example)')
         if len(sys.argv)==1:
             parser.print_help()
             sys.exit(1)
@@ -262,42 +264,161 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     vlen_stop = round(numpy.sum(weights),2)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights
 
+def standard_pyml_load(infile,eventid,conf_file):
+   # Now loading the configuration file
+   if os.path.exists(conf_file) and os.path.getsize(conf_file) > 0:
+      paramfile=conf_file
+   else:
+      sys.stderr.write("Config file " + args.conf + " not existing or empty\n\n")
+      sys.exit(2)
+   confObj = cp.ConfigParser()
+   confObj.read(paramfile)
+
+   # Here we load some basic filenames where pyamp elaboration is written
+   # At present only outputs are stored here but this section is intended
+   # to also host input filenames if usefull or needed (after minor changes
+   # to pyamp
+   # Note:
+   #     when a filename is set to False the output is sent to sys.stdout
+   #     with the exception of log files which output is sent to sys.stderr
+   try:
+       filenames_parameters=get_config_dictionary(confObj, 'iofilenames')
+   except Exception as e:
+       sys.stderr.write(("\n"+str(e)+"\n\n"))
+       sys.exit(1)
+   try:
+       magnitudes_out=str(eventid)+'_'+eval(filenames_parameters['magnitudes'])
+       log_out=str(eventid)+'_'+eval(filenames_parameters['log'])
+   except Exception as e:
+       sys.stderr.write(("\n"+str(e)+"\n\n"))
+       sys.exit(1)
+   
+   #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
+   dfa=pandas.read_csv(args.infile,sep=';',index_col=False)
+   
+   # Here we load the basic condition to decide if to proceed or not
+   # If there is no P do we proceed with theoretical or skip the channel?
+   # If there is no S do we proceed with theoretical or skip the channel?
+   preconditions_parameters=get_config_dictionary(confObj, 'preconditions')
+   theoP=eval(preconditions_parameters['theoretical_p'])
+   theoS=eval(preconditions_parameters['theoretical_s'])
+   delta_corner=float(preconditions_parameters['delta_corner'])
+   max_lowcorner=float(preconditions_parameters['max_lowcorner'])
+   
+   try:
+      station_magnitude_parameters=get_config_dictionary(confObj, 'station_magnitude')
+   except:
+      log_out.write("No section 'station_magnitude' in config file")
+      sys.exit()
+   try:
+      delta_peaks=float(station_magnitude_parameters['delta_peaks'])
+   except:
+      log_out.write("No parameter 'delta_peaks' in section 'station_magnitude' of config file")
+      sys.exit()
+   try:
+      use_stcorr_hb=eval(station_magnitude_parameters['use_stcorr_hb'])
+   except:
+      log_out.write("No parameter 'use_stcorr_hb' in section 'station_magnitude' of config file")
+      sys.exit()
+   try: 
+      use_stcorr_db=eval(station_magnitude_parameters['use_stcorr_db'])
+   except:
+      log_out.write("No parameter 'use_stcorr_db' in section 'station_magnitude' of config file")
+      sys.exit()
+   try:
+      when_no_stcorr_hb=eval(station_magnitude_parameters['when_no_stcorr_hb'])
+   except:
+      log_out.write("No parameter 'when_no_stcorrhb' in section 'station_magnitude' of config file")
+      sys.exit()
+   try:
+      when_no_stcorr_db=eval(station_magnitude_parameters['when_no_stcorr_db'])
+   except:
+      log_out.write("No parameter 'when_no_stcorrdb' in section 'station_magnitude' of config file")
+      sys.exit()
+   
+   try:
+      event_magnitude_parameters=get_config_dictionary(confObj, 'event_magnitude')
+   except:
+      log_out.write("No section 'event_magnitude' in config file")
+      sys.exit()
+   try:
+      mindist=float(event_magnitude_parameters['mindist'])
+   except:
+      log_out.write("No parameter 'mindist' in section 'event_magnitude' of config file")
+      sys.exit()
+   try: 
+      maxdist=float(event_magnitude_parameters['maxdist'])
+   except:
+      log_out.write("No parameter 'maxdist' in section 'event_magnitude' of config file")
+      sys.exit()
+   try:
+      hm_cutoff=eval(event_magnitude_parameters['hm_cutoff'])
+   except:
+      log_out.write("No parameter 'hm_cutoff' in section 'event_magnitude' of config file")
+      sys.exit()
+   try:
+      outliers_max_it=int(event_magnitude_parameters['outliers_max_it'])
+   except:
+      log_out.write("No parameter 'outliers_max_it' in section 'event_magnitude' of config file")
+      sys.exit()
+   try:
+      outliers_red_stop=float(event_magnitude_parameters['outliers_red_stop'])
+   except:
+      log_out.write("No parameter 'outliers_red_stop' in section 'event_magnitude' of config file")
+      sys.exit()
+   try:
+      outliers_nstd=float(event_magnitude_parameters['outliers_nstd'])
+   except:
+      log_out.write("No parameter 'outliers_nstd' in section 'event_magnitude' of config file")
+      sys.exit()
+   try:
+      outliers_cutoff=float(event_magnitude_parameters['outliers_cutoff'])
+   except:
+      log_out.write("No parameter 'outliers_cutoff' in section 'event_magnitude' of config file")
+      sys.exit()
+
+def json_pyml_load(json_in):
+   config=json_in['data']['pyml_conf']
+   origin=json_in['data']['origin']
+   dfa = pandas.DataFrame(json_in['data']['amplitudes'])
+   return dfa,config,origin
+
 ###### End of Functions ##########
 ## Main ##
 args = parseArguments()
-infile=args.infile
-eventid=args.eventid
-
-# Now loading the configuration file
-if os.path.exists(args.conf) and os.path.getsize(args.conf) > 0:
-   paramfile=args.conf
+if not args.json:
+   infile=args.infile
+   conf_file = args.conf
+   eventid=args.eventid
+   dfa,clip,config = standard_pyml_load(infile,eventid,conf_file)
 else:
-   sys.stderr.write("Config file " + args.conf + " not existing or empty\n\n")
-   sys.exit(2)
-confObj = cp.ConfigParser()
-confObj.read(paramfile)
+   print("Uso il JSON")
+   json_in=pandas.read_json(args.json)
+   dfa,config,origin = json_pyml_load(json_in)
+   # Files out
+   magnitudes_out=config['iofilenames']['magnitudes']
+   log_out=config['iofilenames']['log']
+   # Preconditions
+   theoP=config['preconditions']['theoretical_p']
+   theoS=config['preconditions']['theoretical_s']
+   delta_corner=config['preconditions']['delta_corner']
+   max_lowcorner=config['preconditions']['max_lowcorner']
+   # Stations magnitude
+   delta_peaks=config['station_magnitude']['delta_peaks']
+   use_stcorr_hb=config['station_magnitude']['use_stcorr_hb']
+   use_stcorr_db=config['station_magnitude']['use_stcorr_db']
+   when_no_stcorr_hb=config['station_magnitude']['when_no_stcorr_hb']
+   when_no_stcorr_db=config['station_magnitude']['when_no_stcorr_db']
+   # Event Magnitude
+   mindist=config['event_magnitude']['mindist']
+   maxdist=config['event_magnitude']['maxdist']
+   hm_cutoff=config['event_magnitude']['hm_cutoff']
+   outliers_max_it=config['event_magnitude']['outliers_max_it']
+   outliers_red_stop=config['event_magnitude']['outliers_red_stop']
+   outliers_nstd=config['event_magnitude']['outliers_nstd']
+   outliers_cutoff=config['event_magnitude']['outliers_cutoff']
+   sys.exit()
 
-# Here we load some basic filenames where pyamp elaboration is written
-# At present only outputs are stored here but this section is intended
-# to also host input filenames if usefull or needed (after minor changes
-# to pyamp
-# Note:
-#     when a filename is set to False the output is sent to sys.stdout
-#     with the exception of log files which output is sent to sys.stderr
-try:
-    filenames_parameters=get_config_dictionary(confObj, 'iofilenames')
-except Exception as e:
-    sys.stderr.write(("\n"+str(e)+"\n\n"))
-    sys.exit(1)
-try:
-    magnitudes_out=str(eventid)+'_'+eval(filenames_parameters['magnitudes'])
-    log_out=str(eventid)+'_'+eval(filenames_parameters['log'])
-except Exception as e:
-    sys.stderr.write(("\n"+str(e)+"\n\n"))
-    sys.exit(1)
-
-#Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
-dfa=pandas.read_csv(args.infile,sep=';',index_col=False)
 if args.clipped_info:
    clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
 
@@ -310,87 +431,6 @@ if log_out:
    log_out=open(log_out,'w')
 else:
    log_out=sys.stderr
-
-# Here we load the basic condition to decide if to proceed or not
-# If there is no P do we proceed with theoretical or skip the channel?
-# If there is no S do we proceed with theoretical or skip the channel?
-preconditions_parameters=get_config_dictionary(confObj, 'preconditions')
-theoP=eval(preconditions_parameters['theoretical_p'])
-theoS=eval(preconditions_parameters['theoretical_s'])
-delta_corner=float(preconditions_parameters['delta_corner'])
-max_lowcorner=float(preconditions_parameters['max_lowcorner'])
-
-try:
-   station_magnitude_parameters=get_config_dictionary(confObj, 'station_magnitude')
-except:
-   log_out.write("No section 'station_magnitude' in config file")
-   sys.exit()
-try:
-   delta_peaks=float(station_magnitude_parameters['delta_peaks'])
-except:
-   log_out.write("No parameter 'delta_peaks' in section 'station_magnitude' of config file")
-   sys.exit()
-try:
-   use_stcorr_hb=eval(station_magnitude_parameters['use_stcorr_hb'])
-except:
-   log_out.write("No parameter 'use_stcorr_hb' in section 'station_magnitude' of config file")
-   sys.exit()
-try: 
-   use_stcorr_db=eval(station_magnitude_parameters['use_stcorr_db'])
-except:
-   log_out.write("No parameter 'use_stcorr_db' in section 'station_magnitude' of config file")
-   sys.exit()
-try:
-   when_no_stcorr_hb=eval(station_magnitude_parameters['when_no_stcorr_hb'])
-except:
-   log_out.write("No parameter 'when_no_stcorrhb' in section 'station_magnitude' of config file")
-   sys.exit()
-try:
-   when_no_stcorr_db=eval(station_magnitude_parameters['when_no_stcorr_db'])
-except:
-   log_out.write("No parameter 'when_no_stcorrdb' in section 'station_magnitude' of config file")
-   sys.exit()
-
-try:
-   event_magnitude_parameters=get_config_dictionary(confObj, 'event_magnitude')
-except:
-   log_out.write("No section 'event_magnitude' in config file")
-   sys.exit()
-try:
-   mindist=float(event_magnitude_parameters['mindist'])
-except:
-   log_out.write("No parameter 'mindist' in section 'event_magnitude' of config file")
-   sys.exit()
-try: 
-   maxdist=float(event_magnitude_parameters['maxdist'])
-except:
-   log_out.write("No parameter 'maxdist' in section 'event_magnitude' of config file")
-   sys.exit()
-try:
-   hm_cutoff=eval(event_magnitude_parameters['hm_cutoff'])
-except:
-   log_out.write("No parameter 'hm_cutoff' in section 'event_magnitude' of config file")
-   sys.exit()
-try:
-   outliers_max_it=int(event_magnitude_parameters['outliers_max_it'])
-except:
-   log_out.write("No parameter 'outliers_max_it' in section 'event_magnitude' of config file")
-   sys.exit()
-try:
-   outliers_red_stop=float(event_magnitude_parameters['outliers_red_stop'])
-except:
-   log_out.write("No parameter 'outliers_red_stop' in section 'event_magnitude' of config file")
-   sys.exit()
-try:
-   outliers_nstd=float(event_magnitude_parameters['outliers_nstd'])
-except:
-   log_out.write("No parameter 'outliers_nstd' in section 'event_magnitude' of config file")
-   sys.exit()
-try:
-   outliers_cutoff=float(event_magnitude_parameters['outliers_cutoff'])
-except:
-   log_out.write("No parameter 'outliers_cutoff' in section 'event_magnitude' of config file")
-   sys.exit()
 cmp_keys=set()
 components_N={}
 components_E={}
