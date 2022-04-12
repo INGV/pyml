@@ -1,0 +1,40 @@
+{
+    "data": {
+        "magnitude": {
+            "EventID": "0",
+            "ML_HB": "3.1427501284229913",
+            "Std_HB": "0.23768821827579778",
+            "TOTSTA_HB": "56",
+            "USEDSTA_HB": "56.0",
+            "ML_DB": "3.1391854981684326",
+            "Std_DB": "0.18592274181980528",
+            "TOTSTA_DB": "56",
+            "USEDSTA_DB": "56.0",
+            "ampmethod": "ingv",
+            "magmethod": "meanamp",
+            "loopexitcondition": "whuber_varstop=0.03583296235919198_n=1-whuber_varstop=0.016543347275429277_n=1"  questo per ora resta così ma nell'output generato da me lo spitterò
+        },
+        "stationmagnitudes": [
+            {
+                "net": "IV",
+                "sta": "CERA",
+                "cha": "HH",
+                "loc": "--",
+                "a": "MLSTA", # questo non parsarlo
+                "hb_ml": "3.5616337933934203",
+                "hb_w": "1.0",
+                "db_ml": "3.211850123505845",
+                "db_w": "1.0"
+            },
+            {
+                "net": "IV",
+                "sta": "PSB1",
+                "cha": "HH",
+                "loc": "--",
+                "a": "MLSTA", # come sopra
+                "hb_ml": "3.08935636135749",
+                "hb_w": "1.0",
+                "db_ml": "3.339402103341105",
+                "db_w": "1.0"
+            },
+. . .
