@@ -1,11 +1,35 @@
-FROM ubuntu:20.04
+FROM debian:bullseye-slim
+
 LABEL maintainer="Raffaele Di Stefano <raffaele.distefano@ingv.it>"
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update
-RUN apt-get install -y vim
-RUN apt-get install -y python3 python3-pip
-RUN pip3 install pymysql
-RUN pip3 install mysql-connector
-RUN pip3 install mysql-connector-python
+
+# Installing all needed applications
+RUN apt-get clean \
+    && apt-get update \
+    && apt-get dist-upgrade -y --no-install-recommends \
+    && apt-get install -y \
+        python3 \
+        python3-pip \
+        gcc \
+        build-essential \
+        systemd \
+        wget \
+        zip \
+        vim
+
+# Adding python3 libraries
+RUN python3 -m pip install numpy
+RUN python3 -m pip install obspy
+RUN python3 -m pip install pyrocko
+RUN python3 -m pip install plotly
+RUN python3 -m pip install sklearn
+RUN python3 -m pip install scipy
+RUN python3 -m pip install pandas
+RUN python3 -m pip install geographiclib
+
 COPY ./pyml.py /opt/pyml.py
-COPY ./pyml.conf /opt/pyml.conf
+COPY entrypoint.sh /opt
+
+#
+WORKDIR /opt
+ENTRYPOINT ["bash", "/opt/entrypoint.sh"]
