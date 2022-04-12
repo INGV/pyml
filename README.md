@@ -20,8 +20,7 @@ docker build --no-cache --pull --tag ingv/pyml .
 ### Run docker
 To run the container, use the command below; the `-v` option is used to "mount" working directory into container:
 ```
-docker run --rm --user $(id -u):$(id -g) -v $(pwd)/example:/opt/input ingv/pyml
-docker run -it --rm -v`pwd`/examples/input/amplitudes_standard.json:/opt/amplitudes_standard.json --name pyml2 pyml:2.0 --json amplitudes_standard.json
+docker run --user $(id -u):$(id -g) --rm -v $(pwd)/example/input:/opt/data -v $(pwd)/dbona_magnitudes_stations_corrections_extended_mq.csv:/opt/dbona_magnitudes_stations_corrections_extended_mq.csv -v $(pwd)/pyml.py:/opt/pyml.py ingv/pyml --json /opt/data/eventid_28745631.json --dbona_corr /opt/dbona_magnitudes_stations_corrections_extended_mq.csv
 ```
 
 ## Author
