@@ -101,7 +101,7 @@ def get_config_dictionary(cfg, section):
             if dict1[option] == -1:
                 print("skip: %s" % option)
         except:
-            print("exception on %s!" % option)
+            log_out.write("exception on %s!\n" % option)
             dict1[option] = None
     return dict1
 
@@ -253,7 +253,6 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              xmd,xmd_std,v,s,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
              typemean = 'rmoutl'
           xmd_var = abs(amd-xmd)
-          #print(xmd,xmd_std,typemean,xmd_var,n)
           if xmd_var <= var_stop:
              finished = True
              whystop=typemean+'_varstop='+str(xmd_var)+'_n='+str(n)
@@ -402,7 +401,6 @@ if not args.json:
    dfa,clip,config = standard_pyml_load(infile,eventid,conf_file)
 else:
    if os.path.exists(args.json):
-      print("Working on json input")
       json_in=pandas.read_json(args.json)
       dfa,config,origin = json_pyml_load(json_in)
       if dfa.empty or not config or not origin:
@@ -438,15 +436,14 @@ else:
 if args.clipped_info:
    clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
 
-if magnitudes_out:
-   magnitudes_out=open(magnitudes_out,'w')
-else:
-   magnitudes_out=sys.stdout
-
 if log_out:
    log_out=open(log_out,'w')
 else:
    log_out=sys.stderr
+if args.json:
+   log_out.write("Working on json input\n")
+else:
+   log_out.write("Working on standard pyamp input\n")
 cmp_keys=set()
 components_N={}
 components_E={}
@@ -463,8 +460,8 @@ else:
 
 
 km=1000.
+# Standard header
 #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
-print(dfa)
 for index, row in dfa.iterrows():
     try:
         net = str(row['Net'])
@@ -478,8 +475,6 @@ for index, row in dfa.iterrows():
         loc = str(row['Loc'])
     except:
         loc = row['loc']
-        #loc = "00" if not loc else loc
-        print(loc)
     try:
         cha = str(row['Cha'])
     except:
@@ -517,7 +512,7 @@ for index, row in dfa.iterrows():
         #calcolo le distanze
         stla=float(row['lat'])
         stlo=float(row['lon'])
-        stel=float(row['elev'])
+        stel=float(row['elev'])/km
         evla=float(origin['lat'])
         evlo=float(origin['lon'])
         evdp=float(origin['depth'])
@@ -578,12 +573,10 @@ for index, row in dfa.iterrows():
     else:
        log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
 
-magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
 # Hutton and Boore
-#print("Hutton and Boore")
 meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
 if len(meanmag_ml_sta) == 0 or meanamp_hb_ml_sta == 0:
-   print("HuttonBoore List is empty")
+   log_out.write("HuttonBoore List is empty\n")
    mlhb = False
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
@@ -593,10 +586,9 @@ else:
    mlhb = True
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
-#print("Di Bona")
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 if len(meanmag_ml_sta) == 0 or meanamp_db_ml_sta == 0:
-   print("DiBona List is empty")
+   log_out.write("DiBona List is empty\n")
    mldb = False
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
@@ -605,9 +597,15 @@ else:
    ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    mldb = True
 if not mlhb or not mldb:
-   print("Either Hutton and Boore or Di Bona ML was impossible to calculate")
+   log_out.write("Either Hutton and Boore or Di Bona ML was impossible to calculate\n")
    sys.exit()
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
+# Writing magnitudes.csv file
+if magnitudes_out:
+   magnitudes_out=open(magnitudes_out,'w')
+else:
+   magnitudes_out=sys.stdout
+magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weights_db):
