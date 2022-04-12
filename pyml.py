@@ -42,7 +42,6 @@ import numpy
 import math
 import scipy
 import json
-from pyrocko import cake
 from scipy import signal, stats
 from scipy.signal import butter, lfilter, freqz,find_peaks,detrend,welch,hilbert
 # Imports from obpsy
