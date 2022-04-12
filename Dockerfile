@@ -27,6 +27,7 @@ RUN python3 -m pip install scipy
 RUN python3 -m pip install pandas
 RUN python3 -m pip install geographiclib
 
+COPY ./dbona_magnitudes_stations_corrections_extended_mq.csv /opt/dbona_magnitudes_stations_corrections_extended_mq.csv
 COPY ./pyml.py /opt/pyml.py
 COPY entrypoint.sh /opt
 

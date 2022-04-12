@@ -19,4 +19,4 @@ if [[ -z ${@} ]]; then
 fi
 
 # run command
-/usr/bin/python3 /opt/qml2nllphs.py $@
+/usr/bin/python3 /opt/pyml.py $@ --dbona_corr /opt/dbona_magnitudes_stations_corrections_extended_mq.csv
