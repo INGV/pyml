@@ -13,7 +13,7 @@ export MPLCONFIGDIR="/tmp"
 # Check input parameter
 if [[ -z ${@} ]]; then
         echo ""
-	/usr/bin/python3 /opt/qml2nllphs.py -h
+	/usr/bin/python3 /opt/pyml.py -h
         echo ""
         exit 1
 fi
