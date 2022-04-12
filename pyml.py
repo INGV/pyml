@@ -62,9 +62,6 @@ from xml.etree import ElementTree as ET
 from sklearn import preprocessing
 from scipy.fft import fft, ifft, fftfreq
 
-import matplotlib.pyplot as plt
-import ray
-
 class MyParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -403,6 +400,7 @@ else:
    if os.path.exists(args.json):
       json_in=pandas.read_json(args.json)
       dfa,config,origin = json_pyml_load(json_in)
+      eventid=0
       if dfa.empty or not config or not origin:
          sys.stderr.write("The given input json file "+args.json+" was incomplete\n")
          sys.exit()
@@ -522,17 +520,20 @@ for index, row in dfa.iterrows():
         
     ml = [False]*2
     #minamp,maxamp,time_minamp,time_maxamp,amp,met = amp_method[2:]
+    unit=1000 # pyamp units
+    if args.json:
+       unit=1 #db units
     try:
-        minamp=row['MinAmp(m)']*1000
+        minamp=row['MinAmp(m)']*unit
         time_minamp=row['MinAmpTime']
     except:
-        minamp=row['amp1']*1000
+        minamp=row['amp1']*unit
         time_minamp=row['time1']
     try:
-        maxamp=row['MaxAmp(m)']*1000
+        maxamp=row['MaxAmp(m)']*unit
         time_maxamp=row['MaxAmpTime']
     except:
-        maxamp=row['amp2']*1000
+        maxamp=row['amp2']*unit
         time_maxamp=row['time2']
     amp = abs(maxamp-minamp)/2
     try:
