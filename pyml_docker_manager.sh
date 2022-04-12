@@ -16,17 +16,10 @@ elif [[ `uname -a | awk '{print $1}'` == 'Linux' || `uname -a | awk '{print $1}'
 fi
 
 REPO="pyml"
-TAG="1"
+TAG="1.0"
 image_name="$REPO:$TAG"
 container_name="${REPO}_${TAG}"
 dockerfile="Dockerfile"
-
-MYSQL_INGVAN_CONTAINER="ingvandb_1.0"
-LINK_CONTAINER=""
-if [[ `docker ps -a -f name=$MYSQL_INGVAN_CONTAINER -f status=running -q` ]]; then
-	LINK_CONTAINER="--link $MYSQL_INGVAN_CONTAINER"
-fi
-
 
 container_id=`docker ps -a -f name=$container_name -f status=running -q`
 
