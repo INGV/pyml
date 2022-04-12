@@ -469,19 +469,20 @@ for index, row in dfa.iterrows():
     try:
         net = str(row['Net'])
     except:
-        net = str(row['net'])
+        net = row['net']
     try:
         sta = str(row['Sta'])
     except:
-        sta = str(row['sta'])
+        sta = row['sta']
     try:
         loc = str(row['Loc'])
     except:
-        loc = str(row['loc'])
+        loc = row['loc']
+        loc = "00" if not loc else loc
     try:
         cha = str(row['Cha'])
     except:
-        cha = str(row['cha'])
+        cha = row['cha']
     try:
         corner_low=float(row['LoCo'])
     except:
