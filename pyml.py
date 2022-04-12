@@ -478,7 +478,8 @@ for index, row in dfa.iterrows():
         loc = str(row['Loc'])
     except:
         loc = row['loc']
-        loc = "00" if not loc else loc
+        #loc = "00" if not loc else loc
+        print(loc)
     try:
         cha = str(row['Cha'])
     except:

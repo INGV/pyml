@@ -41,7 +41,7 @@
         "net": "IV",
         "sta": "ACER",
         "cha": "HHZ",
-        "loc": "00",
+        "loc": null,
         "lat": 45.492599,
         "lon": 9.19289,
         "elev": 19.1,
