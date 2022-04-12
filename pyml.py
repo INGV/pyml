@@ -378,9 +378,18 @@ def standard_pyml_load(infile,eventid,conf_file):
       sys.exit()
 
 def json_pyml_load(json_in):
-   config=json_in['data']['pyml_conf']
-   origin=json_in['data']['origin']
-   dfa = pandas.DataFrame(json_in['data']['amplitudes'])
+   try:
+      config=json_in['data']['pyml_conf']
+   except:
+      config=False
+   try:
+      origin=json_in['data']['origin']
+   except:
+      origin=False
+   try:
+      dfa = pandas.DataFrame(json_in['data']['amplitudes'])
+   except:
+      dfa=pandas.DataFrame()
    return dfa,config,origin
 
 ###### End of Functions ##########
@@ -392,9 +401,17 @@ if not args.json:
    eventid=args.eventid
    dfa,clip,config = standard_pyml_load(infile,eventid,conf_file)
 else:
-   print("Working on json input")
-   json_in=pandas.read_json(args.json)
-   dfa,config,origin = json_pyml_load(json_in)
+   if os.path.exists(args.json):
+      print("Working on json input")
+      json_in=pandas.read_json(args.json)
+      dfa,config,origin = json_pyml_load(json_in)
+      if dfa.empty or not config or not origin:
+         sys.stderr.write("The given input json file "+args.json+" was incomplete\n")
+         sys.exit()
+   else:
+      sys.stderr.write("No Json input file "+args.json+" found: exit\n")
+      sys.exit()
+
    # Files out
    magnitudes_out=config['iofilenames']['magnitudes']
    log_out=config['iofilenames']['log']
@@ -417,7 +434,6 @@ else:
    outliers_red_stop=config['event_magnitude']['outliers_red_stop']
    outliers_nstd=config['event_magnitude']['outliers_nstd']
    outliers_cutoff=config['event_magnitude']['outliers_cutoff']
-   sys.exit()
 
 if args.clipped_info:
    clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
@@ -448,43 +464,87 @@ else:
 
 km=1000.
 #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
+print(dfa)
 for index, row in dfa.iterrows():
-    net = str(row['Net'])
-    sta = str(row['Sta'])
-    loc = str(row['Loc'])
-    cha = str(row['Cha'])
-    corner_low=float(row['LoCo'])
-    corner_high=float(row['HiCo'])
+    try:
+        net = str(row['Net'])
+    except:
+        net = str(row['net'])
+    try:
+        sta = str(row['Sta'])
+    except:
+        sta = str(row['sta'])
+    try:
+        loc = str(row['Loc'])
+    except:
+        loc = str(row['loc'])
+    try:
+        cha = str(row['Cha'])
+    except:
+        cha = str(row['cha'])
+    try:
+        corner_low=float(row['LoCo'])
+    except:
+        corner_low=False
+    try:
+        corner_high=float(row['HiCo'])
+    except:
+        corner_high=False
     if args.clipped_info:
        clp=clip.loc[(clip['net'] == net) & (clip['sta'] == sta) & (clip['cha'] == cha)]
        if not clp.empty:
-          log_out.write(' '.join(("Component skipped:",str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha'])," due to cliping\n")))
+          log_out.write(' '.join(("Component skipped:",str(net),str(sta),str(loc),str(cha)," due to cliping\n")))
           continue
-    if corner_low >= max_lowcorner or (corner_high-corner_low) < delta_corner:
-       log_out.write(' '.join(("Component skipped:",str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha']),str(corner_low),str(corner_high),"\n")))
+    if corner_low and corner_high and (corner_low >= max_lowcorner or (corner_high-corner_low) < delta_corner):
+       log_out.write(' '.join(("Component skipped:",str(net),str(sta),str(loc),str(cha),str(corner_low),str(corner_high),"\n")))
        continue
-    seed_id='.'.join((str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha'])))
+    seed_id='.'.join((str(net),str(sta),str(loc),str(cha)))
     log_out.write(' '.join(("Working on",seed_id,'\n')))
     # In this block all the possibile conditions not to use this waveforms are checked so to reduce useless computing time
     # First: get timing info from SAC to soon understand if this is a good cut or not for amplitude determination
     #[distmeters,azi,bazi] = distaz(tr.stla,tr.stlo,tr.evla,tr.evlo)
     #tr.dist=distmeters/1000.
-    components_key='_'.join((str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha'][0:2])))
+    components_key='_'.join((str(net),str(sta),str(loc),str(cha[0:2])))
     cmp_keys.add(components_key)
 # Channel Magnitudes calculations and in case of event_magnitude argument on ... station magnitude calculation
-    hypo_dist = row['IpoDistance(km)'] #math.sqrt(math.pow(tr.dist,2)+math.pow(tr.evdp,2))
-    epi_dist = row['EpiDistance(km)'] #math.sqrt(math.pow(tr.dist,2)+math.pow(tr.evdp,2))
+#net   sta  cha loc        lat      lon  elev   amp1                     time1   amp2                     time2
+    try:
+        hypo_dist = row['IpoDistance(km)'] #math.sqrt(math.pow(tr.dist,2)+math.pow(tr.evdp,2))
+        epi_dist = row['EpiDistance(km)'] #math.sqrt(math.pow(tr.dist,2)+math.pow(tr.evdp,2))
+    except:
+        #calcolo le distanze
+        stla=float(row['lat'])
+        stlo=float(row['lon'])
+        stel=float(row['elev'])
+        evla=float(origin['lat'])
+        evlo=float(origin['lon'])
+        evdp=float(origin['depth'])
+        [distmeters,azi,bazi] = distaz(stla,stlo,evla,evlo)
+        epi_dist = distmeters / km
+        hypo_dist = math.sqrt(math.pow(epi_dist,2)+math.pow((evdp+stel),2))
+        
     ml = [False]*2
     #minamp,maxamp,time_minamp,time_maxamp,amp,met = amp_method[2:]
-    minamp=row['MinAmp(m)']*1000
-    maxamp=row['MaxAmp(m)']*1000
-    time_minamp=row['MinAmpTime']
-    time_maxamp=row['MaxAmpTime']
+    try:
+        minamp=row['MinAmp(m)']*1000
+        time_minamp=row['MinAmpTime']
+    except:
+        minamp=row['amp1']*1000
+        time_minamp=row['time1']
+    try:
+        maxamp=row['MaxAmp(m)']*1000
+        time_maxamp=row['MaxAmpTime']
+    except:
+        maxamp=row['amp2']*1000
+        time_maxamp=row['time2']
     amp = abs(maxamp-minamp)/2
-    met=row['Method']
+    try:
+        met=row['Method']
+    except:
+        met='ingv'
     components_key_met=components_key+'_'+met
     # Loading stations corrections
-    dbsite=row['Sta']
+    dbsite=sta
     try:
         s_dibona=float(dbcorr.loc[dbcorr['sta'] == dbsite, 'c'].iloc[0]) # Di Bona Station correction
     except:
@@ -507,31 +567,44 @@ for index, row in dfa.iterrows():
     else:
        ml[1] = False
 
-    if row['Cha'][2] == 'N':
+    if cha[2] == 'N':
        components_N[components_key_met]=[ml,amp,epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
-    elif row['Cha'][2] == 'E':
+    elif cha[2] == 'E':
        components_E[components_key_met]=[ml,amp,epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
-    elif row['Cha'][2] == 'Z':
+    elif cha[2] == 'Z':
        components_Z[components_key_met]=[ml,amp,epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
     else:
-       log_out.write(' '.join(("Component not recognized for ",str(row['Net']),str(row['Sta']),str(row['Loc']),str(row['Cha']),"\n")))
+       log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
 
 magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
 # Hutton and Boore
 #print("Hutton and Boore")
 meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
-meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
-meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
-meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
-ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+if len(meanmag_ml_sta) == 0 or meanamp_hb_ml_sta == 0:
+   print("HuttonBoore List is empty")
+   mlhb = False
+else:
+   meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
+   meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
+   meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
+   ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   mlhb = True
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 #print("Di Bona")
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
-meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
-meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
-meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
-ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+if len(meanmag_ml_sta) == 0 or meanamp_db_ml_sta == 0:
+   print("DiBona List is empty")
+   mldb = False
+else:
+   meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
+   meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
+   meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
+   ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   mldb = True
+if not mlhb or not mldb:
+   print("Either Hutton and Boore or Di Bona ML was impossible to calculate")
+   sys.exit()
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
