@@ -6,8 +6,8 @@
                 "log": "pyml_general.log"
             },
             "preconditions": {
-                "theoretical_p": false,
-                "theoretical_s": false,
+                "theoretical_p": true,
+                "theoretical_s": true,
                 "delta_corner": 5,
                 "max_lowcorner": 15
             },
