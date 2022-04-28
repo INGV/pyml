@@ -140,6 +140,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
     for k in keys:
         kk=k+'_'+mtd
         if kk in cmpn and kk in cmpe: # if both components are present in the set
+           print(cmpn[kk],cmpe[kk])
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
            ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
            if ipodist >= mid and ipodist <= mad: # if ipocentral distance is within the accepted range
