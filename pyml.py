@@ -140,7 +140,6 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
     for k in keys:
         kk=k+'_'+mtd
         if kk in cmpn and kk in cmpe: # if both components are present in the set
-           print(cmpn[kk],cmpe[kk])
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
            ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
            if ipodist >= mid and ipodist <= mad: # if ipocentral distance is within the accepted range
@@ -601,7 +600,10 @@ if not mlhb or not mldb:
    log_out.write("Either Hutton and Boore or Di Bona ML was impossible to calculate\n")
    sys.exit()
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
-# Writing magnitudes.csv file
+
+######################################################
+#          Writing magnitudes.csv file               #
+######################################################
 if magnitudes_out:
    magnitudes_out=open(magnitudes_out,'w')
 else:
@@ -614,7 +616,14 @@ for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weight
     std,md = map(str,y)
     whb = str(wx)
     wdb = str(wy)
-    magnitudes_out.write(' '.join(('MLSTA',sth,mh,whb,std,md,wdb,'\n')))
+    #magnitudes_out.write(' '.join(('MLSTA',sth,mh,whb,std,md,wdb,'\n')))
+    #MLSTA IV_MIDA_None_HN_ingv 3.1782901276644764 1.0 IV_MIDA_None_HN_ingv 3.158132200624496 1.0
+    if components_N[sth] and components_E[sth]:
+       nwr,swr,lwr,chwr,mwr = sth.split('_')
+       ch_N_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "N"
+       ch_E_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "E"
+       magnitudes_out.write(' '.join(('MLCHA',ch_N_rewrite,str(components_N[sth][0][0]),str(whb),ch_N_rewrite,str(components_N[sth][0][1]),str(wdb),'\n')))
+       magnitudes_out.write(' '.join(("MLCHA",ch_E_rewrite,str(components_E[sth][0][0]),str(whb),ch_E_rewrite,str(components_E[sth][0][1]),str(wdb),'\n')))
 if not hm_cutoff:
    for x in outliers_hb[0]:
        sth,mh = map(str,list(x))
