@@ -189,6 +189,7 @@ def wstd(v,wm,wf):
     else:
        index_not_zero = numpy.where(wf > eps2)[0]
        wf_nz = wf[index_not_zero]
+       #print("wf_nz: ",wf_nz)
        v_nz  = v[index_not_zero]
        wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm)))
        fac = ((len(wf_nz)-1)/len(wf_nz))*numpy.sum(wf_nz)
@@ -200,6 +201,7 @@ def whuber(v,w_mean,ruse,zero):
     res = abs(v - w_mean)
     with numpy.errstate(divide='ignore'):
          w = numpy.where(res <= ruse,1.0,numpy.where(res > zero,0.0,ruse/res))
+    #print("W: ",w)
     w_mean = numpy.sum(v * w)/numpy.sum(w)
     w_std = wstd(v,w_mean,w)
     w_std = 0.0 if not w_std else w_std
@@ -243,11 +245,19 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     while not finished:
           amd = xmd
           if hm_cutoff:
-             xmd,xmd_std,weights = whuber(v,xmd,ruse,zero)
-             typemean = 'whuber'
-          else:
+             #print("Calling Whuber","ruse: ",ruse,"zero: ",zero,"V: ",v,"XMD: ",xmd)
+             whuber_fail = False
+             try:
+                 xmd,xmd_std,weights = whuber(v,xmd,ruse,zero)
+                 typemean = 'whuber'
+             except Exception as e:
+                 whuber_fail = True
+          if not hm_cutoff or whuber_fail:
              xmd,xmd_std,v,s,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
-             typemean = 'rmoutl'
+             if not whuber_fail:
+                typemean = 'rmoutl'
+             else:
+                typemean = 'rowhfl'
           xmd_var = abs(amd-xmd)
           if xmd_var <= var_stop:
              finished = True
@@ -257,7 +267,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              whystop=typemean+'_maxit='+str(n)+'_xmdvar='+str(xmd_var)
           n += 1
     vlen_stop = round(numpy.sum(weights),2)
-    return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights
+    return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights,whuber_fail
 
 def standard_pyml_load(infile,eventid,conf_file):
    # Now loading the configuration file
@@ -582,8 +592,10 @@ else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
    meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
-   ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    mlhb = True
+   if wh_hb_fail:
+      print("Hutto_Boore: whuber mean failed, rm_outl used")
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
@@ -594,8 +606,10 @@ else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
    meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
-   ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    mldb = True
+   if wh_db_fail:
+      print("Di Bona: whuber mean failed, rm_outl used")
 if not mlhb or not mldb:
    log_out.write("Either Hutton and Boore or Di Bona ML was impossible to calculate\n")
    sys.exit()
@@ -624,7 +638,7 @@ for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weight
        ch_E_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "E"
        magnitudes_out.write(' '.join(('MLCHA',ch_N_rewrite,str(components_N[sth][0][0]),str(whb),ch_N_rewrite,str(components_N[sth][0][1]),str(wdb),'\n')))
        magnitudes_out.write(' '.join(("MLCHA",ch_E_rewrite,str(components_E[sth][0][0]),str(whb),ch_E_rewrite,str(components_E[sth][0][1]),str(wdb),'\n')))
-if not hm_cutoff:
+if not hm_cutoff or wh_hb_fail or wh_db_fail:
    for x in outliers_hb[0]:
        sth,mh = map(str,list(x))
        magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
