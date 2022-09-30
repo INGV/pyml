@@ -38,28 +38,23 @@
 import argparse,sys,os,glob,copy,pwd,pathlib,itertools
 import geographiclib
 import pandas
-import numpy
-import math
-import scipy
-import json
-from scipy import signal, stats
-from scipy.signal import butter, lfilter, freqz,find_peaks,detrend,welch,hilbert
+import time
+
 # Imports from obpsy
-from obspy import read, UTCDateTime, Stream as st
-from obspy import Trace as tr
-from obspy import signal as obsi
-from obspy.core.util import attribdict
+from obspy import read
 from obspy.geodetics.base import gps2dist_azimuth as distaz
-import obspy.io.sac as sac
-from obspy.io.sac.util import SacInvalidContentError
-from obspy.signal.quality_control import MSEEDMetadata 
-from obspy.core.inventory import read_inventory as rinv
-from decimal import *
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from xml.etree import ElementTree as ET
-from sklearn import preprocessing
-from scipy.fft import fft, ifft, fftfreq
+from scipy.stats import median_abs_deviation
+
+from numpy import where as np_where
+from numpy import sum as np_sum
+from numpy import square as np_square
+from numpy import errstate as np_errstate
+from numpy import median as np_median
+from numpy import ones as np_ones
+from numpy import array as np_array
+from numpy import asarray as np_asarray
+
+from math import sqrt as msqrt, log10 as mlog10, pow as mpow
 
 class MyParser(argparse.ArgumentParser):
     def error(self, message):
@@ -108,7 +103,7 @@ def huttonboore(a,d,s,uc):
     s = 0 if not uc else s # station correction is set to 0 if use_stcorr_hb is False
     s = 0 if not s else s # station correction is set to 0 if it is False
     try:
-       m = math.log10(a) + 1.110*math.log10(d / 100.) + 0.00189*(d - 100.) + 3.0 + s # Hutton & Boore with s added but not confirmed if it is correct
+       m = mlog10(a) + 1.110*mlog10(d / 100.) + 0.00189*(d - 100.) + 3.0 + s # Hutton & Boore with s added but not confirmed if it is correct
     except:
        m = False
     return m
@@ -120,15 +115,11 @@ def dibona(a,d,s,uc):
     s = 0 if not uc else s # station correction is set to 0 if use_stcorr_hb is False
     s = 0 if not s else s # station correction is set to 0 if it is False
     try:
-       m = math.log10(a) + 1.667*math.log10(d / 100.) + 0.001736*(d - 100.) + 3.0 + s # Massimo Di Bona
+       m = mlog10(a) + 1.667*mlog10(d / 100.) + 0.001736*(d - 100.) + 3.0 + s # Massimo Di Bona
     except:
        m = False
     return m
 
-
-#ml = math.log10(amp) + 1.792176*math.log10(tr.dist/100.) + 0.001428*(tr.dist-100.)  + 3.00 -s_cattaneo # Ancona/Cattaneo/TABOO Formula
-#ml = math.log10(amp*1000) + 1.11*math.log10(tr.dist) + 0.00189*tr.dist - 2.09 # ISC Formula
-#ml = math.log10(amp/1000.) + 1.110*math.log10(tr.dist) + 0.00189*(tr.dist) + 3.591
 
 def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
     # mtd is the peakmethod
@@ -151,7 +142,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
                  # Magnitudes of Mean channel amplitudes is calculated if 
                  if not stc or (cmpn[kk][4][mty] and cmpe[kk][4][mty]) or whstc: 
                     #mean_amp = (cmpn[kk][1] + cmpe[kk][1])/2 # Artimetic mean
-                    mean_amp_geo = math.sqrt((cmpn[kk][1] * cmpe[kk][1])) # Geometric mean that is the correct one according to Richter and Di Bona
+                    mean_amp_geo = msqrt((cmpn[kk][1] * cmpe[kk][1])) # Geometric mean that is the correct one according to Richter and Di Bona
                     corr = (cmpn[kk][4][mty] + cmpe[kk][4][mty])/2 if cmpn[kk][4][mty] and cmpe[kk][4][mty] else False
                     if mty == 0:
                        ma = huttonboore(mean_amp_geo,ipodist,corr,stc)
@@ -187,22 +178,22 @@ def wstd(v,wm,wf):
     if len(v) <= 1:
        wsd = False
     else:
-       index_not_zero = numpy.where(wf > eps2)[0]
+       index_not_zero = np_where(wf > eps2)[0]
        wf_nz = wf[index_not_zero]
        #print("wf_nz: ",wf_nz)
        v_nz  = v[index_not_zero]
-       wsd = numpy.sum(wf_nz*numpy.square((v_nz-wm)))
-       fac = ((len(wf_nz)-1)/len(wf_nz))*numpy.sum(wf_nz)
+       wsd = np_sum(wf_nz*np_square((v_nz-wm)))
+       fac = ((len(wf_nz)-1)/len(wf_nz))*np_sum(wf_nz)
        wsd = wsd / max(fac,eps2)
-       wsd = math.sqrt(max(wsd,eps2))
+       wsd = msqrt(max(wsd,eps2))
     return wsd 
 
 def whuber(v,w_mean,ruse,zero):
     res = abs(v - w_mean)
-    with numpy.errstate(divide='ignore'):
-         w = numpy.where(res <= ruse,1.0,numpy.where(res > zero,0.0,ruse/res))
+    with np_errstate(divide='ignore'):
+         w = np_where(res <= ruse,1.0,np_where(res > zero,0.0,ruse/res))
     #print("W: ",w)
-    w_mean = numpy.sum(v * w)/numpy.sum(w)
+    w_mean = np_sum(v * w)/np_sum(w)
     w_std = wstd(v,w_mean,w)
     w_std = 0.0 if not w_std else w_std
     return w_mean,w_std,w
@@ -217,25 +208,25 @@ def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
     v = v[not_outlier]
     v_flag = v_flag[not_outlier]
     if len(v) > 0:
-       v_std  = scipy.stats.median_abs_deviation(v)
-       v_mean = numpy.median(v)
+       v_std  = median_abs_deviation(v)
+       v_mean = np_median(v)
        n_v_flag = len(v)
     else:
        v_std  = False
        v_mean = False
        n_v_flag = False
-    w_fake = numpy.ones(len(v))
+    w_fake = np_ones(len(v))
     return v_mean,v_std,v,v_flag,w_fake,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
-    v = numpy.array(magnitudes)
+    v = np_array(magnitudes)
     s = magnitudes_sta
     ruse = hm_cutoff
     # Calculate starting values from m (magnitudes) vector
     # We here use a median and mad instead of the mean and std as stating values because they are more robust
     # Names are taken from Huber Mean routine by Franco Mele for coherence
-    xmd = numpy.median(v)
-    xmd_std  = scipy.stats.median_abs_deviation(v)
+    xmd = np_median(v)
+    xmd_std  = median_abs_deviation(v)
     vlen_start = len(v)
     n = 1
     finished = False
@@ -266,7 +257,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              finished = True
              whystop=typemean+'_maxit='+str(n)+'_xmdvar='+str(xmd_var)
           n += 1
-    vlen_stop = round(numpy.sum(weights),2)
+    vlen_stop = round(np_sum(weights),2)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights,whuber_fail
 
 def standard_pyml_load(infile,eventid,conf_file):
@@ -399,6 +390,7 @@ def json_pyml_load(json_in):
 
 ###### End of Functions ##########
 ## Main ##
+main_start_time = time.perf_counter()
 args = parseArguments()
 if not args.json:
    infile=args.infile
@@ -462,13 +454,11 @@ if args.dbona_corr:
 else:
    dbcorr=False
 
-# Setup plot if option given
-#fig = go.Figure() if args.plot else False
-
 
 km=1000.
 # Standard header
 #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
+start_time = time.perf_counter()
 for index, row in dfa.iterrows():
     try:
         net = str(row['Net'])
@@ -513,8 +503,8 @@ for index, row in dfa.iterrows():
 # Channel Magnitudes calculations and in case of event_magnitude argument on ... station magnitude calculation
 #net   sta  cha loc        lat      lon  elev   amp1                     time1   amp2                     time2
     try:
-        hypo_dist = row['IpoDistance(km)'] #math.sqrt(math.pow(tr.dist,2)+math.pow(tr.evdp,2))
-        epi_dist = row['EpiDistance(km)'] #math.sqrt(math.pow(tr.dist,2)+math.pow(tr.evdp,2))
+        hypo_dist = row['IpoDistance(km)']
+        epi_dist = row['EpiDistance(km)']
     except:
         #calcolo le distanze
         stla=float(row['lat'])
@@ -525,7 +515,7 @@ for index, row in dfa.iterrows():
         evdp=float(origin['depth'])
         [distmeters,azi,bazi] = distaz(stla,stlo,evla,evlo)
         epi_dist = distmeters / km
-        hypo_dist = math.sqrt(math.pow(epi_dist,2)+math.pow((evdp+stel),2))
+        hypo_dist = msqrt(mpow(epi_dist,2)+mpow((evdp+stel),2))
         
     ml = [False]*2
     #minamp,maxamp,time_minamp,time_maxamp,amp,met = amp_method[2:]
@@ -582,17 +572,28 @@ for index, row in dfa.iterrows():
        components_Z[components_key_met]=[ml,amp,epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
     else:
        log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
+end_time = time.perf_counter()
+execution_time = end_time - start_time
+log_out.write("dfa: the execution time is: "+str(execution_time)+"\n")
 
 # Hutton and Boore
+start_time = time.perf_counter()
 meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
+end_time = time.perf_counter()
+execution_time = end_time - start_time
+log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
 if len(meanmag_ml_sta) == 0 or meanamp_hb_ml_sta == 0:
    log_out.write("HuttonBoore List is empty\n")
    mlhb = False
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
-   meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
+   meanamp_ml_sta = np_asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
+   start_time = time.perf_counter()
    ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   end_time = time.perf_counter()
+   execution_time = end_time - start_time
+   log_out.write("calculate_event_ml HB: the execution time is: "+str(execution_time)+"\n")
    mlhb = True
    if wh_hb_fail:
       print("Hutto_Boore: whuber mean failed, rm_outl used")
@@ -605,8 +606,12 @@ if len(meanmag_ml_sta) == 0 or meanamp_db_ml_sta == 0:
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
-   meanamp_ml_sta = numpy.asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
+   meanamp_ml_sta = np_asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
+   start_time = time.perf_counter()
    ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   end_time = time.perf_counter()
+   execution_time = end_time - start_time
+   log_out.write("calculate_event_ml DB: the execution time is: "+str(execution_time)+"\n")
    mldb = True
    if wh_db_fail:
       print("Di Bona: whuber mean failed, rm_outl used")
@@ -647,5 +652,8 @@ if not hm_cutoff or wh_hb_fail or wh_db_fail:
        magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
 # Now closing all output files
 magnitudes_out.close()
+main_end_time = time.perf_counter()
+main_execution_time = main_end_time - main_start_time
+log_out.write("MAIN: the execution time is: "+str(main_execution_time)+"\n")
 log_out.close()
 sys.exit()
