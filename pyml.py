@@ -39,6 +39,7 @@ import argparse,sys,os,glob,copy,pwd,pathlib,itertools
 import geographiclib
 import pandas
 import time
+import json
 
 # Imports from obpsy
 from obspy import read
@@ -388,6 +389,35 @@ def json_pyml_load(json_in):
       dfa=pandas.DataFrame()
    return dfa,config,origin
 
+# JSON ENCODER CLASS
+class DataEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+
+        if isinstance(o, datetime):
+            return o.isoformat()
+
+        return json.JSONEncoder.default(self, o)
+
+def json_response_structure():
+    null=False
+    response = {"data": {
+                "rtypes": []}
+               }
+    rtype = {
+             "detail": null,
+             "instance": null,
+             "status": null,
+             "title": null,
+             "type": null
+            }
+    return response,rtype
+
+def json_pyml_response(r):
+    x=json.dumps(r,cls=DataEncoder)
+    return x 
+
 ###### End of Functions ##########
 ## Main ##
 main_start_time = time.perf_counter()
@@ -576,6 +606,8 @@ end_time = time.perf_counter()
 execution_time = end_time - start_time
 log_out.write("dfa: the execution time is: "+str(execution_time)+"\n")
 
+response,rtype = json_response_structure()
+resp = copy.deepcopy(response)
 # Hutton and Boore
 start_time = time.perf_counter()
 meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
@@ -583,8 +615,15 @@ end_time = time.perf_counter()
 execution_time = end_time - start_time
 log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
 if len(meanmag_ml_sta) == 0 or meanamp_hb_ml_sta == 0:
-   log_out.write("HuttonBoore List is empty\n")
+   msg='HuttonBoore List is empty'
+   log_out.write(msg+"\n")
    mlhb = False
+   resp_type = copy.deepcopy(rtype)
+   resp_type['status'] = '204'
+   resp_type['type'] = 'https://www.rfc-editor.org/rfc/rfc7231#section-6.3.5'
+   resp_type['title'] = msg
+   resp_type['detail'] = 'All the stations missing due to only one channel is present, or out of minmax distance'
+   resp["data"]["rtypes"].append(resp_type) # push oggetto oo in hypocenters
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
@@ -601,8 +640,15 @@ else:
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
 if len(meanmag_ml_sta) == 0 or meanamp_db_ml_sta == 0:
-   log_out.write("DiBona List is empty\n")
+   msg='Dibona List is empty'
+   log_out.write(msg+"\n")
    mldb = False
+   resp_type = copy.deepcopy(rtype)
+   resp_type['status'] = '204'
+   resp_type['type'] = 'https://www.rfc-editor.org/rfc/rfc7231#section-6.3.5'
+   resp_type['title'] = msg
+   resp_type['detail'] = 'All the stations missing due to only one channel is present, or out of minmax distance'
+   resp["data"]["rtypes"].append(resp_type) # push oggetto oo in hypocenters
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
@@ -617,6 +663,7 @@ else:
       print("Di Bona: whuber mean failed, rm_outl used")
 if not mlhb or not mldb:
    log_out.write("Either Hutton and Boore or Di Bona ML was impossible to calculate\n")
+   sys.stderr.write(json_pyml_response(resp))
    sys.exit()
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 
