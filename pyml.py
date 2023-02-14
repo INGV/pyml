@@ -418,8 +418,11 @@ class DataEncoder(json.JSONEncoder):
 
 def json_response_structure():
     null=False
-    response = {"data": {
-                "rtypes": []}
+    response = {
+                "random_string": null,
+                "magnitudes": [],
+                "stationmagnitudes": [],
+                "rtypes": []
                }
     rtype = {
              "detail": null,
@@ -428,7 +431,35 @@ def json_response_structure():
              "title": null,
              "type": null
             }
-    return response,rtype
+    magnitudes = {
+                  "hb": [],
+                  "db": [],
+                  "ampmethod": null,
+                  "magmethod": null,
+                  "loopexitcondition": null
+                 }
+    stationmagnitudes = {
+                         "net": null,
+                         "sta": null,
+                         "cha": null,
+                         "loc": null,
+                         "amp1": null,
+                         "time1": null,
+                         "amp2": null,
+                         "time2": null,
+                         "lat": null,
+                         "lon": null,
+                         "elev": null,
+                         "hb": {
+                             "ml": null,
+                             "w": null 
+                         },
+                         "db": {
+                             "ml": null,
+                             "w": null
+                         }
+                        }
+    return response,rtype,magnitudes,stationmagnitudes
 
 def json_pyml_response(r):
     x=json.dumps(r,cls=DataEncoder)
