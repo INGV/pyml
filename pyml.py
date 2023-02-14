@@ -1,39 +1,43 @@
 # Authors: Raffaele Di Stefano (raffaele.distefano@ingv.it), Barbara Castello (barbara.castello@ingv.it)
+# Aknowledgements: Valentino Lauciani (valentino.lauciani@ingv.it) and Andrea Bono (andrea.bono@ingv.it) - adaptation to the monitoring system
 # Licence: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
-# PyML reads in pyamp_amplitudes.csv or the same data from a MySQL table and
-# - calculates channel ML on all the three components
-# - calculates event ML when a set of waveform (of one single event) is given
+# 
+# Input files:
+# - option 1) channels' amplitudes csv file, stations corrections csv files, pyml.conf
+# - option 2) channels' amplitudes json file with conf included, stations corrections csv files
+# Operations:
+# - calculates channel ML on all the three components with several Attenuation Laws
+# - calculates station ML on all the stations either as a mean of channel's one or as ML of the mean amplitude
+# - calculates event ML for all the Attenuation Laws with different possibile statistical approaches
 #    
-# Amplitude usage
+# Details: Amplitude usage
 #    Two different approaches are followed to calculate the station ML:
-#    - the mean of the maximum amplitudes N and E is used in the attenuation law to get the station ML
-#    - the mean of the N and E ML is performed to give the station ML
-#    The second method is at present commented out
-
+#    - the mean of the maximum amplitudes N and E is used in the attenuation law to get the station ML (mean can be aritmetic or geometric)
+#    - the mean of the N and E ML is performed to give the station ML (mean can be aritmetic or geometric)
 # Attenuation Law
 #    PyML implemets two different attenuation laws for the ML calculation:
 #    - INGV Hutton & Boore which is mutuated by the one formerly used at USGS for the 
 #      adapted to the Italian region with no stations corrections
 #    - M. Di Bona attenuation law calculated specifically for the Italian region
 #      with stations corrections at 400 stations (Di Bona 1-199 and Mele-Quintiliani 200-400)
+#    - Lolli Gssperini and Mele double attenuation law is coming soon
 #
 # Mean ML Value and Standard deviation calculation
 #    Two alternative, both iterative, approaches can be used 
 #    Both methods start from the median and not from the mean for robustness, then they diverge from each other
-#    1) Outliers removal (weighting function is not applied or it can considered to be 0 for outlier and 1 for the rest)
-#       Parameters are taken from the .conf file:
+#    1) Strict Huber Mean / Outliers removal (weighting function is not applied or it can considered to be 0 for outlier and 1 for the rest)
+#       Parameters are taken from the .conf file or from the json input:
 #       - outliers_nstd: how many time (outliers_nstd*standarddev) must be used to cut out the outliers
 #       - outliers_cutoff: a lower limit to the outliers_nstd*standarddev value
 #       - outliers_red_stop: stops iterations when abs(mean_old-updated_mean)) is lower than outliers_red_stop
 #       - outliers_max_it: after this value iterations it stops iterating anyway (no convergence); this value is also used in the other method
 #    2) Weighted Huber Mean
-#       after the preliminary median calculation this approach calculates it's own weighted mean value and standard deviation
-#       Parameters are taken from the .conf file:
+#       after the preliminary mean calculation this approach calculates it's own weighted mean value and standard deviation
+#       Parameters are taken from the .conf file or from the json input:
 #       - outliers_max_it: same as the other
 #       - hm_cutoff: this is the corner of the downweighting function; whatever is inside +/- hm_cutoff from the (updated) weighted mean has weight 1.0,
 #         the rest is downweighted as hm_cutoff/(distance_from_the_mean)
 #    In both cases stations with hypocentral distance lower than mindist (tipically 10km) and higher than maxdist (tipically 600) are excluded
-#
 
 import argparse,sys,os,glob,copy,pwd,pathlib,itertools
 import geographiclib
@@ -142,8 +146,8 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
                     meanmag_ml_set.append([kk,mm])
                  # Magnitudes of Mean channel amplitudes is calculated if 
                  if not stc or (cmpn[kk][4][mty] and cmpe[kk][4][mty]) or whstc: 
-                    #mean_amp = (cmpn[kk][1] + cmpe[kk][1])/2 # Artimetic mean
-                    mean_amp_geo = msqrt((cmpn[kk][1] * cmpe[kk][1])) # Geometric mean that is the correct one according to Richter and Di Bona
+                    mean_amp_ari = (cmpn[kk][1] + cmpe[kk][1])/2 # Artimetic mean
+                    mean_amp_geo = msqrt((cmpn[kk][1] * cmpe[kk][1])) # Geometric mean that is the correct one according to Di Bona
                     corr = (cmpn[kk][4][mty] + cmpe[kk][4][mty])/2 if cmpn[kk][4][mty] and cmpe[kk][4][mty] else False
                     if mty == 0:
                        ma = huttonboore(mean_amp_geo,ipodist,corr,stc)
@@ -153,7 +157,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
               else:
                  log_out.write(' '.join(("Station skipped due to minmax distance: ",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
            else:
-              log_out.write(' '.join(("Station skipped due to epidist: ",str(k),str(epidist),"\n")))
+              log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
         else:
            log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
     return meanmag_ml_set,meanamp_ml_set
@@ -308,6 +312,17 @@ def standard_pyml_load(infile,eventid,conf_file):
       log_out.write("No section 'station_magnitude' in config file")
       sys.exit()
    try:
+      mag_mean_type=eval(station_magnitude_parameters['mag_mean_type'])
+   except:
+      log_out.write("No parameter 'mag_mean_type' in section 'station_magnitude' of config file")
+      sys.exit()
+   if mag_mean_type == 'meanamp':
+      try:
+         amp_mean_type=eval(station_magnitude_parameters['amp_mean_type'])
+      except:
+         log_out.write("No parameter 'amp_mean_type' in section 'station_magnitude' of config file")
+         sys.exit()
+   try:
       delta_peaks=float(station_magnitude_parameters['delta_peaks'])
    except:
       log_out.write("No parameter 'delta_peaks' in section 'station_magnitude' of config file")
@@ -373,6 +388,7 @@ def standard_pyml_load(infile,eventid,conf_file):
    except:
       log_out.write("No parameter 'outliers_cutoff' in section 'event_magnitude' of config file")
       sys.exit()
+   return dfa,magnitudes_out,log_out,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff 
 
 def json_pyml_load(json_in):
    try:
@@ -426,7 +442,10 @@ if not args.json:
    infile=args.infile
    conf_file = args.conf
    eventid=args.eventid
-   dfa,clip,config = standard_pyml_load(infile,eventid,conf_file)
+   dfa,magnitudes_out,log_out,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file)
+   if dfa.empty:
+      sys.stderr.write("The given input json file "+args.json+" was incomplete\n")
+      sys.exit()
 else:
    if os.path.exists(args.json):
       json_in=pandas.read_json(args.json)
@@ -480,7 +499,11 @@ components_Z={}
 mcalc=True
 
 if args.dbona_corr:
-   dbcorr=pandas.read_csv(args.dbona_corr,sep=';')
+   try:
+      dbcorr=pandas.read_csv(args.dbona_corr,sep=';')
+   except:
+      log_out.write("File "+args.dbona_corr+" not found\n")
+      sys.exit()
 else:
    dbcorr=False
 
@@ -546,6 +569,7 @@ for index, row in dfa.iterrows():
         [distmeters,azi,bazi] = distaz(stla,stlo,evla,evlo)
         epi_dist = distmeters / km
         hypo_dist = msqrt(mpow(epi_dist,2)+mpow((evdp+stel),2))
+        log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist),str(hypo_dist),"\n")))
         
     ml = [False]*2
     #minamp,maxamp,time_minamp,time_maxamp,amp,met = amp_method[2:]
