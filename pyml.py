@@ -138,6 +138,8 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
            ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
+           amp_e = abs(cmpe[kk][1][1]-cmpe[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
+           amp_n = abs(cmpn[kk][1][1]-cmpn[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
            if ipodist >= mid and ipodist <= mad: # if ipocentral distance is within the accepted range
               if mtd != 'free' or (mtd == 'free' and abs(cmpn[kk][6]-cmpn[kk][5]) <= dp and abs(cmpe[kk][6]-cmpe[kk][5]) <= dp): # if the method is not free the deltapeak has no meaning orherwise it is evaluated
                  #Mean of channel magnitudes is calculated
@@ -146,8 +148,8 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc):
                     meanmag_ml_set.append([kk,mm])
                  # Magnitudes of Mean channel amplitudes is calculated if 
                  if not stc or (cmpn[kk][4][mty] and cmpe[kk][4][mty]) or whstc: 
-                    mean_amp_ari = (cmpn[kk][1] + cmpe[kk][1])/2 # Artimetic mean
-                    mean_amp_geo = msqrt((cmpn[kk][1] * cmpe[kk][1])) # Geometric mean that is the correct one according to Di Bona
+                    mean_amp_ari = (amp_n + amp_e)/2 # Artimetic mean
+                    mean_amp_geo = msqrt(amp_n * amp_e) # Geometric mean that is the correct one according to Di Bona
                     corr = (cmpn[kk][4][mty] + cmpe[kk][4][mty])/2 if cmpn[kk][4][mty] and cmpe[kk][4][mty] else False
                     if mty == 0:
                        ma = huttonboore(mean_amp_geo,ipodist,corr,stc)
@@ -420,7 +422,7 @@ def json_response_structure():
     null=False
     response = {
                 "random_string": null,
-                "magnitudes": [],
+                "magnitudes": {},
                 "stationmagnitudes": [],
                 "rtypes": []
                }
@@ -432,12 +434,19 @@ def json_response_structure():
              "type": null
             }
     magnitudes = {
-                  "hb": [],
-                  "db": [],
+                  "hb": {},
+                  "db": {},
                   "ampmethod": null,
                   "magmethod": null,
                   "loopexitcondition": null
                  }
+    emag = {
+            "ml": null,
+            "std": null,
+            "totsta": null,
+            "usedsta": null
+           }
+            
     stationmagnitudes = {
                          "net": null,
                          "sta": null,
@@ -459,7 +468,7 @@ def json_response_structure():
                              "w": null
                          }
                         }
-    return response,rtype,magnitudes,stationmagnitudes
+    return response,rtype,magnitudes,stationmagnitudes,emag
 
 def json_pyml_response(r):
     x=json.dumps(r,cls=DataEncoder)
@@ -498,6 +507,8 @@ else:
    delta_corner=config['preconditions']['delta_corner']
    max_lowcorner=config['preconditions']['max_lowcorner']
    # Stations magnitude
+   mag_mean_type=config['station_magnitude']['mag_mean_type']
+   amp_mean_type=config['station_magnitude']['amp_mean_type']
    delta_peaks=config['station_magnitude']['delta_peaks']
    use_stcorr_hb=config['station_magnitude']['use_stcorr_hb']
    use_stcorr_db=config['station_magnitude']['use_stcorr_db']
@@ -591,9 +602,9 @@ for index, row in dfa.iterrows():
         epi_dist = row['EpiDistance(km)']
     except:
         #calcolo le distanze
-        stla=float(row['lat'])
-        stlo=float(row['lon'])
-        stel=float(row['elev'])/km
+        stla=False if pandas.isna(row['lat']) else float(row['lat'])
+        stlo=False if pandas.isna(row['lon']) else float(row['lon'])
+        stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
         evla=float(origin['lat'])
         evlo=float(origin['lon'])
         evdp=float(origin['depth'])
@@ -650,19 +661,20 @@ for index, row in dfa.iterrows():
        ml[1] = False
 
     if cha[2] == 'N':
-       components_N[components_key_met]=[ml,amp,epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
+       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     elif cha[2] == 'E':
-       components_E[components_key_met]=[ml,amp,epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
+       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     elif cha[2] == 'Z':
-       components_Z[components_key_met]=[ml,amp,epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
+       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     else:
        log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
 end_time = time.perf_counter()
 execution_time = end_time - start_time
 log_out.write("dfa: the execution time is: "+str(execution_time)+"\n")
 
-response,rtype = json_response_structure()
-resp = copy.deepcopy(response)
+jresponse,jrtype,jmagnitudes,jstationmagnitudes,jemag = json_response_structure()
+resp = copy.deepcopy(jresponse)
+resp['random_string'] = 'testraf'
 # Hutton and Boore
 start_time = time.perf_counter()
 meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb)
@@ -673,12 +685,12 @@ if len(meanmag_ml_sta) == 0 or meanamp_hb_ml_sta == 0:
    msg='HuttonBoore List is empty'
    log_out.write(msg+"\n")
    mlhb = False
-   resp_type = copy.deepcopy(rtype)
+   resp_type = copy.deepcopy(jrtype)
    resp_type['status'] = '204'
    resp_type['type'] = 'https://www.rfc-editor.org/rfc/rfc7231#section-6.3.5'
    resp_type['title'] = msg
    resp_type['detail'] = 'All the stations missing due to only one channel is present, or out of minmax distance'
-   resp["data"]["rtypes"].append(resp_type) # push oggetto oo in hypocenters
+   resp["rtypes"].append(resp_type) # push oggetto oo in hypocenters
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
@@ -691,6 +703,7 @@ else:
    mlhb = True
    if wh_hb_fail:
       print("Hutto_Boore: whuber mean failed, rm_outl used")
+      mlhb = False
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db)
@@ -703,7 +716,7 @@ if len(meanmag_ml_sta) == 0 or meanamp_db_ml_sta == 0:
    resp_type['type'] = 'https://www.rfc-editor.org/rfc/rfc7231#section-6.3.5'
    resp_type['title'] = msg
    resp_type['detail'] = 'All the stations missing due to only one channel is present, or out of minmax distance'
-   resp["data"]["rtypes"].append(resp_type) # push oggetto oo in hypocenters
+   resp["rtypes"].append(resp_type) # push oggetto oo in hypocenters
 else:
    meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
@@ -730,8 +743,31 @@ if magnitudes_out:
 else:
    magnitudes_out=sys.stdout
 magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
-magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,'meanamp',cond_hb+'-'+cond_db,'\n')))
+magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,mag_mean_type,cond_hb+'-'+cond_db,'\n')))
+
+# JSON WRITE
+jmags = copy.deepcopy(jmagnitudes)
+jhb = copy.deepcopy(jemag)
+jhb['ml'] = ma_mlh
+jhb['std'] = ma_stdh
+jhb['totsta'] = ma_ns_s_h
+jhb['usedsta'] = ma_nsh
+jmags["hb"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
+jhb = copy.deepcopy(jemag)
+jhb['ml'] = ma_mld
+jhb['std'] = ma_stdd
+jhb['totsta'] = ma_ns_s_d
+jhb['usedsta'] = ma_nsd
+jmags["db"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
+jmags["ampmethod"] = met
+jmags["magmethod"] = mag_mean_type
+jmags["loopexitcondition"] = cond_hb+'-'+cond_db
+resp["magnitudes"].update(jmags)
+
+#json.dump(jmags,sys.stdout)
+
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
+channels_dictionary = {}
 for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weights_db):
     sth,mh = map(str,x)
     std,md = map(str,y)
@@ -743,8 +779,10 @@ for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weight
        nwr,swr,lwr,chwr,mwr = sth.split('_')
        ch_N_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "N"
        ch_E_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "E"
+       ch_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "_" + met
        magnitudes_out.write(' '.join(('MLCHA',ch_N_rewrite,str(components_N[sth][0][0]),str(whb),ch_N_rewrite,str(components_N[sth][0][1]),str(wdb),'\n')))
        magnitudes_out.write(' '.join(("MLCHA",ch_E_rewrite,str(components_E[sth][0][0]),str(whb),ch_E_rewrite,str(components_E[sth][0][1]),str(wdb),'\n')))
+       channels_dictionary[ch_rewrite] = [[components_N[sth][0][0],whb,components_N[sth][0][1],wdb],[components_E[sth][0][0],whb,components_E[sth][0][1],wdb]]
 if not hm_cutoff or wh_hb_fail or wh_db_fail:
    for x in outliers_hb[0]:
        sth,mh = map(str,list(x))
@@ -752,6 +790,66 @@ if not hm_cutoff or wh_hb_fail or wh_db_fail:
    for y in outliers_db[0]:
        std,md = map(str,list(y))
        magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
+
+
+for key in components_N:
+    try:
+        components_N[key]
+    except:
+        components_N[key] = False
+    try:
+        components_E[key]
+    except:
+        components_E[key] = False
+    try:
+        channels_dictionary[key]
+    except:
+        channels_dictionary[key] = False
+
+    n,s,l,c,m = key.split('_')
+    jstmag = copy.deepcopy(jstationmagnitudes)
+    if components_N[key]:
+            jstmag["net"] = n
+            jstmag["sta"] = s
+            jstmag["cha"] = c + 'N'
+            jstmag["loc"] =  "--" if l == 'None' else l
+            jstmag["amp1"] = components_N[key][1][0]
+            jstmag["time1"] = components_N[key][5]
+            jstmag["amp2"] = components_N[key][1][1]
+            jstmag["time2"] = components_N[key][6]
+            if components_N[key][7]:
+               jstmag["lat"] = components_N[key][7]
+            if components_N[key][8]:
+               jstmag["lon"] = components_N[key][8]
+            if components_N[key][9]:
+               jstmag["elev"] = components_N[key][9]
+            if channels_dictionary[key]:
+               jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": channels_dictionary[key][0][1]}
+               jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": channels_dictionary[key][0][3]}
+            resp["stationmagnitudes"].append(jstmag)
+    jstmag = copy.deepcopy(jstationmagnitudes)
+    if components_E[key]:
+            jstmag["net"] = n
+            jstmag["sta"] = s
+            jstmag["cha"] = c + 'E'
+            jstmag["loc"] =  "--" if l == 'None' else l
+            jstmag["amp1"] = components_E[key][1][0]
+            jstmag["time1"] = components_E[key][5]
+            jstmag["amp2"] = components_E[key][1][1]
+            jstmag["time2"] = components_E[key][6]
+            if components_E[key][7]:
+               jstmag["lat"] = components_E[key][7]
+            if components_E[key][8]:
+               jstmag["lon"] = components_E[key][8]
+            if components_E[key][9]:
+               jstmag["elev"] = components_E[key][9]
+            if channels_dictionary[key]:
+               jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": channels_dictionary[key][1][1]}
+               jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": channels_dictionary[key][1][3]}
+            resp["stationmagnitudes"].append(jstmag)
+    
+sys.stdout.write(json_pyml_response(resp))
+
 # Now closing all output files
 magnitudes_out.close()
 main_end_time = time.perf_counter()
