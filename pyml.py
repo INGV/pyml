@@ -95,7 +95,7 @@ def get_config_dictionary(cfg, section):
         try:
             dict1[option] = cfg.get(section, option)
             if dict1[option] == -1:
-                print("skip: %s" % option)
+                sys.stderr.write(("skip: %s" % option))
         except:
             log_out.write("exception on %s!\n" % option)
             dict1[option] = None
@@ -232,18 +232,28 @@ def whuber(v,w_mean,ruse,zero):
     with np_errstate(divide='ignore'):
          w = np_where(res <= ruse,1.0,np_where(res > zero,0.0,ruse/res))
     #print("W: ",w)
-    w_mean = np_sum(v * w)/np_sum(w)
-    w_std = wstd(v,w_mean,w)
+    try:
+       w_mean = np_sum(v * w)/np_sum(w)
+    except Exception as e:
+       sys.stderr.write(("Error calculalting the Huber Mean",e))
+       w_mean = False
+    if w_mean:
+       w_std = wstd(v,w_mean,w)
+    else:
+       w_std = False
     w_std = 0.0 if not w_std else w_std
     return w_mean,w_std,w
 
 def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
     res = abs(v - v_mean)
+    w_fake = np_ones(len(v))
     v_mean_old = v_mean
     cut_limit = times_std * v_std if (times_std * v_std) > co else co
     not_outlier = res  < cut_limit
     yes_outlier = res >= cut_limit
     skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
+    w_fake[yes_outlier]=0
+    w_fake[not_outlier]=1
     v = v[not_outlier]
     v_flag = v_flag[not_outlier]
     if len(v) > 0:
@@ -254,7 +264,6 @@ def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
        v_std  = False
        v_mean = False
        n_v_flag = False
-    w_fake = np_ones(len(v))
     return v_mean,v_std,v,v_flag,w_fake,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
@@ -269,10 +278,10 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     vlen_start = len(v)
     n = 1
     finished = False
-    removed=[]
     if hm_cutoff:
        ruse,zero = [hm_cutoff,9999.0] if isinstance(hm_cutoff,float) else hm_cutoff
     while not finished:
+          removed=[]
           amd = xmd
           if hm_cutoff:
              #print("Calling Whuber","ruse: ",ruse,"zero: ",zero,"V: ",v,"XMD: ",xmd)
@@ -738,8 +747,7 @@ else:
    log_out.write("calculate_event_ml HB: the execution time is: "+str(execution_time)+"\n")
    mlhb = True
    if wh_hb_fail:
-      print("Hutto_Boore: whuber mean failed, rm_outl used")
-      mlhb = False
+      sys.stderr.write("Hutto_Boore: whuber mean failed, rm_outl used")
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
 meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,resp,jlogmessage)
@@ -764,7 +772,7 @@ else:
    log_out.write("calculate_event_ml DB: the execution time is: "+str(execution_time)+"\n")
    mldb = True
    if wh_db_fail:
-      print("Di Bona: whuber mean failed, rm_outl used")
+      sys.stderr.write("Di Bona: whuber mean failed, rm_outl used")
 if not mlhb:
    log_out.write("Hutton&Boore ML was impossible to calculate\n")
    sys.stderr.write(json_pyml_response(resp))
