@@ -133,6 +133,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,resp,jlogmessage):
     #   where ml is a list of two: [ml_hutton,ml_dibona]
     meanmag_ml_set=[]
     meanamp_ml_set=[]
+    mtytxt='HuttonBoore' if mty==0 else 'DiBona'
     for k in keys:
         kk=k+'_'+mtd
         logm = copy.deepcopy(jlogmessage)
@@ -764,8 +765,14 @@ else:
    mldb = True
    if wh_db_fail:
       print("Di Bona: whuber mean failed, rm_outl used")
-if not mlhb or not mldb:
-   log_out.write("Either Hutton and Boore or Di Bona ML was impossible to calculate\n")
+if not mlhb:
+   log_out.write("Hutton&Boore ML was impossible to calculate\n")
+   sys.stderr.write(json_pyml_response(resp))
+if not mldb:
+   log_out.write("Di Bona ML was impossible to calculate\n")
+   sys.stderr.write(json_pyml_response(resp))
+if not mlhb and not mldb:
+   log_out.write("Neither Hutton&Boore nor Di Bona ML was impossible to calculate\n")
    sys.stderr.write(json_pyml_response(resp))
    sys.exit()
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
