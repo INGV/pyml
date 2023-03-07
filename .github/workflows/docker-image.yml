@@ -49,7 +49,7 @@ jobs:
           provider: dockerhub
           destination_container_repo: ingv/pyml
           readme_file: 'README.md'
-          short_description: 'Python code, complementary to pyamp, to calculate ML with different methods and attenuation functions using pyamp_amplitude output file or database table.'
+          short_description: 'Python code to calculate ML with different methods and attenuation functions.'
         
       #- uses: actions/checkout@v3
       #- name: Build the Docker image
