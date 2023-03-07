@@ -789,13 +789,13 @@ else:
       resp["log"].append(logm)
 if not mlhb:
    log_out.write("Hutton&Boore ML was impossible to calculate\n")
-   sys.stderr.write(json_pyml_response(resp))
+   sys.stdout.write(json_pyml_response(resp))
 if not mldb:
    log_out.write("Di Bona ML was impossible to calculate\n")
-   sys.stderr.write(json_pyml_response(resp))
+   sys.stdout.write(json_pyml_response(resp))
 if not mlhb and not mldb:
    log_out.write("Neither Hutton&Boore nor Di Bona ML was impossible to calculate\n")
-   sys.stderr.write(json_pyml_response(resp))
+   sys.stdout.write(json_pyml_response(resp))
    sys.exit()
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 
