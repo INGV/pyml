@@ -750,7 +750,7 @@ else:
    log_out.write("calculate_event_ml HB: the execution time is: "+str(execution_time)+"\n")
    mlhb = True
    if wh_hb_fail:
-      sys.stderr.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
+      log_out.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
       msg="Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead"
       logm = copy.deepcopy(jlogmessage)
       logm['status'] = 'warning'
@@ -780,7 +780,7 @@ else:
    log_out.write("calculate_event_ml DB: the execution time is: "+str(execution_time)+"\n")
    mldb = True
    if wh_db_fail:
-      sys.stderr.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
+      log_out.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
       msg="Di Bona: Weighted Huber Mean failed, Outliers Removal used instead"
       logm = copy.deepcopy(jlogmessage)
       logm['status'] = 'warning'
