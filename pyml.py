@@ -148,10 +148,9 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
               epidist = False
               ipodist = False
               log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
-              logm['status'] = '422' 
-              logm['type'] = 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/422'
-              logm['title'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to stations coordinates missing"))
-              logm['detail'] = ' '.join(("Distance is",str(ipodist),"km"))
+              logm['status'] = 'critical'
+              logm['level'] = 'station'
+              logm['info'] = {"summary": ' '.join(("Station skipped due to stations coordinates missing: ",str(k))), "extended": ''}
               resp["log"].append(logm)
               continue
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
@@ -168,7 +167,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
                     if amt == 'ari':
                        mean_amp = (amp_n + amp_e)/2 # Artimetic mean
                     elif amt == 'geo':
-                       mean_amp_geo = msqrt(amp_n * amp_e) # Geometric mean that is the correct one according to Di Bona
+                       mean_amp = msqrt(amp_n * amp_e) # Geometric mean that is the correct one according to Di Bona
                     corr = (cmpn[kk][4][mty] + cmpe[kk][4][mty])/2 if cmpn[kk][4][mty] and cmpe[kk][4][mty] else False
                     if mty == 0:
                        mm = huttonboore(mean_amp,ipodist,corr,stc)
@@ -178,25 +177,23 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
                        mtytxt = 'DiBona'
                  ml_set.append([kk,mm])
               else:
-                 log_out.write(' '.join(("Station skipped due to amp minmax distance: ",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
-                 logm['status'] = '422' 
-                 logm['type'] = 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/422'
-                 logm['title'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to amp minmax distance"))
-                 logm['detail'] = ' '.join(("Distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))
+                 log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
+                 logm['status'] = 'warning'
+                 logm['level'] = 'station'
+                 logm['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to time distance between min and max amp larger than",str(dp))), "extended": ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))}
                  resp["log"].append(logm)
            else:
               log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
-              logm['status'] = '422' 
-              logm['type'] = 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/422'
-              logm['title'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist"))
-              logm['detail'] = ' '.join(("Distance is",str(ipodist),"km"))
+              logm['status'] = 'warning' 
+              logm['level'] = 'station' 
+              logm['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist")), "extended": ' '.join(("Distance is",str(ipodist),"km"))}
               resp["log"].append(logm)
         else:
            log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
            logm['status'] = 'warning' 
-           logm['level'] = 'station' 
+           logm['level'] = 'channel' 
            missing="N" if kk not in cmpn else "E"
-           logm['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to missing channel")), "extended": ' '.join(("Distance is",missing,"km"))}
+           logm['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to missing channel")), "extended": ' '.join(("Missing channel is",missing))}
            resp["log"].append(logm)
     return ml_set
 
@@ -729,11 +726,11 @@ resp = copy.deepcopy(jresponse)
 resp['random_string'] = 'testraf'
 # Hutton and Boore
 start_time = time.perf_counter()
-meanmag_ml_sta,meanamp_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlogmessage)
+mean_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlogmessage)
 end_time = time.perf_counter()
 execution_time = end_time - start_time
 log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
-if len(meanmag_ml_sta) == 0 or meanamp_hb_ml_sta == 0:
+if len(mean_hb_ml_sta) == 0:
    msg='HuttonBoore List is empty'
    log_out.write(msg+"\n")
    mlhb = False
@@ -743,18 +740,18 @@ if len(meanmag_ml_sta) == 0 or meanamp_hb_ml_sta == 0:
    logm['info'] = {"summary": msg, "extended": 'All the stations missing due to only one channel is present, or out of minmax distance'}
    resp["log"].append(logm)
 else:
-   meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
-   meanamp_ml = list(list(zip(*meanamp_hb_ml_sta))[1])
-   meanamp_ml_sta = np_asarray(list(list(zip(*meanamp_hb_ml_sta))[0]), dtype=object)
+   #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
+   mean_ml = list(list(zip(*mean_hb_ml_sta))[1])
+   mean_ml_sta = np_asarray(list(list(zip(*mean_hb_ml_sta))[0]), dtype=object)
    start_time = time.perf_counter()
-   ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    end_time = time.perf_counter()
    execution_time = end_time - start_time
    log_out.write("calculate_event_ml HB: the execution time is: "+str(execution_time)+"\n")
    mlhb = True
    if wh_hb_fail:
-      sys.stderr.write("Hutto_Boore: whuber mean failed, rm_outl used\n")
-      msg="Hutto&Boore: whuber mean failed, rm_outl used"
+      sys.stderr.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
+      msg="Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead"
       logm = copy.deepcopy(jlogmessage)
       logm['status'] = 'warning'
       logm['level'] = 'event'
@@ -762,8 +759,8 @@ else:
       resp["log"].append(logm)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
-meanmag_ml_sta,meanamp_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlogmessage)
-if len(meanmag_ml_sta) == 0 or meanamp_db_ml_sta == 0:
+mean_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlogmessage)
+if len(mean_db_ml_sta) == 0:
    msg='Dibona List is empty'
    log_out.write(msg+"\n")
    mldb = False
@@ -773,18 +770,18 @@ if len(meanmag_ml_sta) == 0 or meanamp_db_ml_sta == 0:
    logm['info'] = {"summary": msg, "extended": 'All the stations missing due to only one channel is present, or out of minmax distance'}
    resp["log"].append(logm)
 else:
-   meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
-   meanamp_ml = list(list(zip(*meanamp_db_ml_sta))[1])
-   meanamp_ml_sta = np_asarray(list(list(zip(*meanamp_db_ml_sta))[0]), dtype=object)
+   #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
+   mean_ml = list(list(zip(*mean_db_ml_sta))[1])
+   mean_ml_sta = np_asarray(list(list(zip(*mean_db_ml_sta))[0]), dtype=object)
    start_time = time.perf_counter()
-   ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(meanamp_ml,meanamp_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
+   ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    end_time = time.perf_counter()
    execution_time = end_time - start_time
    log_out.write("calculate_event_ml DB: the execution time is: "+str(execution_time)+"\n")
    mldb = True
    if wh_db_fail:
-      sys.stderr.write("Di Bona: whuber mean failed, rm_outl used\n")
-      msg="Di Bona: whuber mean failed, rm_outl used"
+      sys.stderr.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
+      msg="Di Bona: Weighted Huber Mean failed, Outliers Removal used instead"
       logm = copy.deepcopy(jlogmessage)
       logm['status'] = 'warning'
       logm['level'] = 'event'
@@ -809,8 +806,10 @@ if magnitudes_out:
    magnitudes_out=open(magnitudes_out,'w')
 else:
    magnitudes_out=sys.stdout
-magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;magmethod;loopexitcondition\n")
-magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,mag_mean_type,cond_hb+'-'+cond_db,'\n')))
+if mag_mean_type == 'meanmag':
+   amp_mean_type='False'
+magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;amp_mean_type;mag_mean_type;loopexitcondition\n")
+magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,amp_mean_type,mag_mean_type,cond_hb+'-'+cond_db,'\n')))
 
 # JSON WRITE
 jmags = copy.deepcopy(jmagnitudes)
@@ -835,7 +834,7 @@ resp["magnitudes"].update(jmags)
 
 #magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 channels_dictionary = {}
-for x, y, wx, wy in zip(meanamp_hb_ml_sta, meanamp_db_ml_sta, weights_hb, weights_db):
+for x, y, wx, wy in zip(mean_hb_ml_sta, mean_db_ml_sta, weights_hb, weights_db):
     sth,mh = map(str,x)
     std,md = map(str,y)
     whb = str(wx)
