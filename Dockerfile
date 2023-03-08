@@ -15,6 +15,7 @@ RUN apt-get clean \
         systemd \
         wget \
         zip \
+        curl \
         vim
 
 # Adding python3 libraries
