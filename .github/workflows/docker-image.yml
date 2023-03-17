@@ -10,8 +10,8 @@ on:
     branches:
       - "main"
 
+# Read: https://docs.docker.com/build/ci/github-actions/manage-tags-labels/
 jobs:
-
   build_and_push_to_registry:
     name: Build and Push Docker image to Docker Hub
     runs-on: ubuntu-latest
