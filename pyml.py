@@ -245,27 +245,27 @@ def whuber(v,w_mean,ruse,zero):
     w_std = 0.0 if not w_std else w_std
     return w_mean,w_std,w
 
-def rm_outliers(v,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
+def rm_outliers(v,v_w,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
     res = abs(v - v_mean)
-    w_fake = np_ones(len(v))
+    #w_fake = np_ones(len(v))
     v_mean_old = v_mean
     cut_limit = times_std * v_std if (times_std * v_std) > co else co
     not_outlier = res  < cut_limit
     yes_outlier = res >= cut_limit
     skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
-    w_fake[yes_outlier]=0
-    w_fake[not_outlier]=1
-    v = v[not_outlier]
-    v_flag = v_flag[not_outlier]
-    if len(v) > 0:
-       v_std  = median_abs_deviation(v)
-       v_mean = np_median(v)
-       n_v_flag = len(v)
+    v_w[yes_outlier]=0
+    v_w[not_outlier]=1
+    #v = v[not_outlier]
+    #v_flag = v_flag[not_outlier]
+    if len(v[not_outlier]) > 0:
+       v_std  = median_abs_deviation(v[not_outlier])
+       v_mean = np_median(v[not_outlier])
+       n_v_flag = len(v[not_outlier])
     else:
        v_std  = False
        v_mean = False
        n_v_flag = False
-    return v_mean,v_std,v,v_flag,w_fake,skip
+    return v_mean,v_std,v_w,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
     v = np_array(magnitudes)
@@ -281,8 +281,9 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     finished = False
     if hm_cutoff:
        ruse,zero = [hm_cutoff,9999.0] if isinstance(hm_cutoff,float) else hm_cutoff
+    weights = np_ones(len(v))
+    removed=[]
     while not finished:
-          removed=[]
           amd = xmd
           if hm_cutoff:
              #print("Calling Whuber","ruse: ",ruse,"zero: ",zero,"V: ",v,"XMD: ",xmd)
@@ -293,7 +294,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              except Exception as e:
                  whuber_fail = True
           if not hm_cutoff or whuber_fail:
-             xmd,xmd_std,v,s,weights,removed = rm_outliers(v,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
+             xmd,xmd_std,weights,removed = rm_outliers(v,weights,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
              if not whuber_fail:
                 typemean = 'rmoutl'
              else:
