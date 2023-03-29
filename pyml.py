@@ -897,7 +897,8 @@ for key in components_N:
             logm['status'] = 'ok'
             logm['level'] = 'channel'
             logm['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E'+jstmag["loc"], "extended": ''}
-            resp["stationmagnitudes"].append(jstmag)
+            if components_N[key][7] and components_N[key][8] and components_N[key][9]:
+               resp["stationmagnitudes"].append(jstmag)
             resp["log"].append(logm)
     jstmag = copy.deepcopy(jstationmagnitude)
     if components_E[key]:
@@ -922,9 +923,10 @@ for key in components_N:
             logm['status'] = 'ok'
             logm['level'] = 'channel'
             logm['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N'+jstmag["loc"], "extended": ''}
-            resp["stationmagnitudes"].append(jstmag)
+            if components_E[key][7] and components_E[key][8] and components_E[key][9]:
+               resp["stationmagnitudes"].append(jstmag)
             resp["log"].append(logm)
-            resp["stationmagnitudes"].append(jstmag)
+            #resp["stationmagnitudes"].append(jstmag)
     
 sys.stdout.write(json_pyml_response(resp))
 
