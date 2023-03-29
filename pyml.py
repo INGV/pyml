@@ -502,9 +502,9 @@ def json_response_structure():
                          "time1": null,
                          "amp2": null,
                          "time2": null,
-                         "lat": null,
-                         "lon": null,
-                         "elev": null,
+#                        "lat": null,
+#                        "lon": null,
+#                        "elev": null,
                          "hb": {
                              "ml": null,
                              "w": null 
