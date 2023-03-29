@@ -142,7 +142,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
     for k in keys:
         kk=k+'_'+mtd
         logm = copy.deepcopy(jlogmessage)
-        logm['instance'] = 'function create_sets' 
+        #logm['instance'] = 'function create_sets' 
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            if not cmpn[kk][2] or not cmpe[kk][2]:
               epidist = False
