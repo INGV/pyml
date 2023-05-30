@@ -69,10 +69,10 @@ class MyParser(argparse.ArgumentParser):
 
 def parseArguments():
         parser=MyParser()	
-        parser.add_argument('--json',        default=None,          help='json config and amplitudes file')
-        parser.add_argument('--infile',      default=None,          help='pyamp-amplitudes.csv file full path')
-        parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event')
-        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (see the example)')
+        parser.add_argument('--json',        default=None,          help='json config and amplitudes file (this option is ALTERNATIVE to --infile+--conf)')
+        parser.add_argument('--infile',      default=None,          help='pyamp-amplitudes.csv file full path (used only with --conf)')
+        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (used only with --infile)')
+        parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event (only used with --infile+--conf)')
         parser.add_argument('--dbona_corr',  default='dbcor.csv',   help='Input file with DiBona Stations corrections')
         parser.add_argument('--clipped_info',help='Input file with information on clipped channels')
         if len(sys.argv)==1:
@@ -530,7 +530,7 @@ if not args.json:
    eventid=args.eventid
    dfa,magnitudes_out,log_out,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file)
    if dfa.empty:
-      sys.stderr.write("The given input json file "+args.json+" was incomplete\n")
+      sys.stderr.write("The given input pyamp file "+args.infile+" was incomplete\n")
       sys.exit()
 else:
    if os.path.exists(args.json):
