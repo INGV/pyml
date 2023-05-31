@@ -97,7 +97,8 @@ def get_config_dictionary(cfg, section):
             if dict1[option] == -1:
                 sys.stderr.write(("skip: %s" % option))
         except:
-            log_out.write("exception on %s!\n" % option)
+            if log_out:
+               log_out.write("exception on %s!\n" % option)
             dict1[option] = None
     return dict1
 
@@ -126,7 +127,7 @@ def dibona(a,d,s,uc):
     return m
 
 
-def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmessage):
+def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmessage,jlogmessagech):
     # mtd is the peakmethod
     # mty is the huttonboore 0, dibona 1
     # a channel cmpn is [ml,amp,tr.dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
@@ -142,16 +143,20 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
     for k in keys:
         kk=k+'_'+mtd
         logm = copy.deepcopy(jlogmessage)
-        #logm['instance'] = 'function create_sets' 
+        logmch = copy.deepcopy(jlogmessagech)
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            if not cmpn[kk][2] or not cmpe[kk][2]:
               epidist = False
               ipodist = False
-              log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
-              logm['status'] = 'critical'
-              logm['level'] = 'station'
-              logm['info'] = {"summary": ' '.join(("Station skipped due to stations coordinates missing: ",str(k))), "extended": ''}
-              resp["log"].append(logm)
+              if log_out:
+                 log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
+              logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
+              logmch['cha'] = logmch['cha']+'-'
+              logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
+              logmch['status'] = 'critical'
+              logmch['level'] = 'station'
+              logmch['info'] = {"summary": "Station skipped due to stations coordinates missing", "extended": mtytxt }
+              resp["log"].append(logmch)
               continue
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
            ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
@@ -177,24 +182,36 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
                        mtytxt = 'DiBona'
                  ml_set.append([kk,mm])
               else:
-                 log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
-                 logm['status'] = 'warning'
-                 logm['level'] = 'station'
-                 logm['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to time distance between min and max amp larger than",str(dp))), "extended": ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))}
-                 resp["log"].append(logm)
+                 if log_out:
+                    log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
+                 logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
+                 logmch['cha'] = logmch['cha']+'-'
+                 logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
+                 logmch['status'] = 'warning'
+                 logmch['level'] = 'station'
+                 logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to time distance between min and max amp larger than",str(dp))), "extended": ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))}
+                 resp["log"].append(logmch)
            else:
-              log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
-              logm['status'] = 'warning' 
-              logm['level'] = 'station' 
-              logm['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist")), "extended": ' '.join(("Distance is",str(ipodist),"km"))}
-              resp["log"].append(logm)
+              if log_out:
+                 log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
+                 logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
+                 logmch['cha'] = logmch['cha']+'-'
+                 logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
+                 logmch['status'] = 'warning' 
+                 logmch['level'] = 'station' 
+                 logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist")), "extended": ' '.join(("Distance is",str(ipodist),"km"))}
+                 resp["log"].append(logmch)
         else:
-           log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
-           logm['status'] = 'warning' 
-           logm['level'] = 'channel' 
+           if log_out:
+              log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
+           logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
+           logmch['cha'] = logmch['cha']+'-'
+           logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
+           logmch['status'] = 'warning' 
+           logmch['level'] = 'channel' 
            missing="N" if kk not in cmpn else "E"
-           logm['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to missing channel")), "extended": ' '.join(("Missing channel is",missing))}
-           resp["log"].append(logm)
+           logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to missing channel")), "extended": ' '.join(("Missing channel is",missing))}
+           resp["log"].append(logmch)
     return ml_set
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -469,15 +486,25 @@ def json_response_structure():
                 "stationmagnitudes": [],
                 "log": []
                }
-    logmessage = {
+    logmessage_generic = {
              "level": null,
-             #"instance": null,
              "status": null,
              "info": {
                    "summary": null,
                    "extended": null
              }, 
-             #"type": null
+            }
+    logmessage_channel = {
+             "net": null,
+             "sta": null,
+             "cha": null,
+             "loc": null,
+             "level": null,
+             "status": null,
+             "info": {
+                   "summary": null,
+                   "extended": null
+             }, 
             }
     magnitudes = {
                   "hb": {},
@@ -514,16 +541,20 @@ def json_response_structure():
                              "w": null
                          }
                         }
-    return response,logmessage,magnitudes,stationmagnitude,emag
+    return response,logmessage_generic,logmessage_channel,magnitudes,stationmagnitude,emag
 
 def json_pyml_response(r):
     x=json.dumps(r,cls=DataEncoder)
     return x 
 
+###############################################################
 ###### End of Functions ##########
-## Main ##
+###### Main starts here ##########
 main_start_time = time.perf_counter()
 args = parseArguments()
+
+############## PYML works either in CSV in/out or JSON in/out) #############################################################
+### IF no JSON argument is given, pyml works reading and writing csv files, with configuration loaded from a dictionary file
 if not args.json:
    infile=args.infile
    conf_file = args.conf
@@ -532,6 +563,10 @@ if not args.json:
    if dfa.empty:
       sys.stderr.write("The given input pyamp file "+args.infile+" was incomplete\n")
       sys.exit()
+### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
+   # Files out
+   magnitudes_out=config['iofilenames']['magnitudes']
+   log_out=config['iofilenames']['log']
 else:
    if os.path.exists(args.json):
       json_in=pandas.read_json(args.json)
@@ -540,13 +575,12 @@ else:
       if dfa.empty or not config or not origin:
          sys.stderr.write("The given input json file "+args.json+" was incomplete\n")
          sys.exit()
+      magnitudes_out=False
+      log_out=False
    else:
       sys.stderr.write("No Json input file "+args.json+" found: exit\n")
       sys.exit()
 
-   # Files out
-   magnitudes_out=config['iofilenames']['magnitudes']
-   log_out=config['iofilenames']['log']
    # Preconditions
    theoP=config['preconditions']['theoretical_p']
    theoS=config['preconditions']['theoretical_s']
@@ -574,12 +608,12 @@ if args.clipped_info:
 
 if log_out:
    log_out=open(log_out,'w')
-else:
-   log_out=sys.stderr
-if args.json:
-   log_out.write("Working on json input\n")
-else:
-   log_out.write("Working on standard pyamp input\n")
+#else:
+#   log_out=sys.stderr
+#if args.json:
+#   log_out.write("Working on json input\n")
+#else:
+#   log_out.write("Working on standard pyamp input\n")
 cmp_keys=set()
 components_N={}
 components_E={}
@@ -634,7 +668,8 @@ for index, row in dfa.iterrows():
        log_out.write(' '.join(("Component skipped:",str(net),str(sta),str(loc),str(cha),str(corner_low),str(corner_high),"\n")))
        continue
     seed_id='.'.join((str(net),str(sta),str(loc),str(cha)))
-    log_out.write(' '.join(("Working on",seed_id,'\n')))
+    if log_out:
+       log_out.write(' '.join(("Working on",seed_id,'\n')))
     # In this block all the possibile conditions not to use this waveforms are checked so to reduce useless computing time
     # First: get timing info from SAC to soon understand if this is a good cut or not for amplitude determination
     #[distmeters,azi,bazi] = distaz(tr.stla,tr.stlo,tr.evla,tr.evlo)
@@ -661,7 +696,8 @@ for index, row in dfa.iterrows():
            [distmeters,azi,bazi] = distaz(stla,stlo,evla,evlo)
            epi_dist = distmeters / km
            hypo_dist = msqrt(mpow(epi_dist,2)+mpow((evdp+stel),2))
-        log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist),str(hypo_dist),"\n")))
+        if log_out:
+           log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist),str(hypo_dist),"\n")))
         
     ml = [False]*2
     #minamp,maxamp,time_minamp,time_maxamp,amp,met = amp_method[2:]
@@ -718,22 +754,23 @@ for index, row in dfa.iterrows():
        components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     else:
        log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
-end_time = time.perf_counter()
-execution_time = end_time - start_time
-log_out.write("dfa: the execution time is: "+str(execution_time)+"\n")
+#end_time = time.perf_counter()
+#execution_time = end_time - start_time
 
-jresponse,jlogmessage,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
+jresponse,jlogmessage,jlogmessagech,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
 resp = copy.deepcopy(jresponse)
-resp['random_string'] = 'testraf'
+resp['random_string'] = 'github/ingv/pyml'
 # Hutton and Boore
-start_time = time.perf_counter()
-mean_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlogmessage)
-end_time = time.perf_counter()
-execution_time = end_time - start_time
-log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
+#start_time = time.perf_counter()
+mean_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
+#end_time = time.perf_counter()
+#execution_time = end_time - start_time
+#if log_out:
+#   log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
 if len(mean_hb_ml_sta) == 0:
    msg='HuttonBoore List is empty'
-   log_out.write(msg+"\n")
+   if log_out:
+      log_out.write(msg+"\n")
    mlhb = False
    logm = copy.deepcopy(jlogmessage)
    logm['status'] = 'warning'
@@ -748,10 +785,12 @@ else:
    ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    end_time = time.perf_counter()
    execution_time = end_time - start_time
-   log_out.write("calculate_event_ml HB: the execution time is: "+str(execution_time)+"\n")
+   if log_out:
+      log_out.write("calculate_event_ml HB: the execution time is: "+str(execution_time)+"\n")
    mlhb = True
    if wh_hb_fail:
-      log_out.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
+      if log_out:
+         log_out.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
       msg="Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead"
       logm = copy.deepcopy(jlogmessage)
       logm['status'] = 'warning'
@@ -760,7 +799,7 @@ else:
       resp["log"].append(logm)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
-mean_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlogmessage)
+mean_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
 if len(mean_db_ml_sta) == 0:
    msg='Dibona List is empty'
    log_out.write(msg+"\n")
@@ -778,10 +817,12 @@ else:
    ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    end_time = time.perf_counter()
    execution_time = end_time - start_time
-   log_out.write("calculate_event_ml DB: the execution time is: "+str(execution_time)+"\n")
+   if log_out:
+      log_out.write("calculate_event_ml DB: the execution time is: "+str(execution_time)+"\n")
    mldb = True
    if wh_db_fail:
-      log_out.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
+      if log_out:
+         log_out.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
       msg="Di Bona: Weighted Huber Mean failed, Outliers Removal used instead"
       logm = copy.deepcopy(jlogmessage)
       logm['status'] = 'warning'
@@ -805,12 +846,15 @@ if not mlhb and not mldb:
 ######################################################
 if magnitudes_out:
    magnitudes_out=open(magnitudes_out,'w')
-else:
-   magnitudes_out=sys.stdout
+#else:
+#   magnitudes_out=sys.stdout
+
 if mag_mean_type == 'meanmag':
    amp_mean_type='False'
-magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;amp_mean_type;mag_mean_type;loopexitcondition\n")
-magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,amp_mean_type,mag_mean_type,cond_hb+'-'+cond_db,'\n')))
+
+if magnitudes_out:
+   magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;amp_mean_type;mag_mean_type;loopexitcondition\n")
+   magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,amp_mean_type,mag_mean_type,cond_hb+'-'+cond_db,'\n')))
 
 # JSON WRITE
 jmags = copy.deepcopy(jmagnitudes)
@@ -847,16 +891,19 @@ for x, y, wx, wy in zip(mean_hb_ml_sta, mean_db_ml_sta, weights_hb, weights_db):
        ch_N_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "N"
        ch_E_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "E"
        ch_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "_" + met
-       magnitudes_out.write(' '.join(('MLCHA',ch_N_rewrite,str(components_N[sth][0][0]),str(whb),ch_N_rewrite,str(components_N[sth][0][1]),str(wdb),'\n')))
-       magnitudes_out.write(' '.join(("MLCHA",ch_E_rewrite,str(components_E[sth][0][0]),str(whb),ch_E_rewrite,str(components_E[sth][0][1]),str(wdb),'\n')))
+       if magnitudes_out:
+          magnitudes_out.write(' '.join(('MLCHA',ch_N_rewrite,str(components_N[sth][0][0]),str(whb),ch_N_rewrite,str(components_N[sth][0][1]),str(wdb),'\n')))
+          magnitudes_out.write(' '.join(("MLCHA",ch_E_rewrite,str(components_E[sth][0][0]),str(whb),ch_E_rewrite,str(components_E[sth][0][1]),str(wdb),'\n')))
        channels_dictionary[ch_rewrite] = [[components_N[sth][0][0],whb,components_N[sth][0][1],wdb],[components_E[sth][0][0],whb,components_E[sth][0][1],wdb]]
 if not hm_cutoff or wh_hb_fail or wh_db_fail:
    for x in outliers_hb[0]:
        sth,mh = map(str,list(x))
-       magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
+       if magnitudes_out:
+          magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
    for y in outliers_db[0]:
        std,md = map(str,list(y))
-       magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
+       if magnitudes_out:
+          magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
 
 
 for key in components_N:
@@ -931,9 +978,11 @@ for key in components_N:
 sys.stdout.write(json_pyml_response(resp))
 
 # Now closing all output files
-magnitudes_out.close()
-main_end_time = time.perf_counter()
-main_execution_time = main_end_time - main_start_time
-log_out.write("MAIN: the execution time is: "+str(main_execution_time)+"\n")
-log_out.close()
+if magnitudes_out:
+   magnitudes_out.close()
+#main_end_time = time.perf_counter()
+#main_execution_time = main_end_time - main_start_time
+if log_out:
+   #log_out.write("MAIN: the execution time is: "+str(main_execution_time)+"\n")
+   log_out.close()
 sys.exit()
