@@ -924,6 +924,7 @@ for key in components_N:
     jstmag = copy.deepcopy(jstationmagnitude)
     if components_N[key]:
             logm = copy.deepcopy(jlogmessage)
+            logmch = copy.deepcopy(jlogmessagech)
             jstmag["net"] = n
             jstmag["sta"] = s
             jstmag["cha"] = c + 'N'
@@ -941,15 +942,20 @@ for key in components_N:
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": channels_dictionary[key][0][1]}
                jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": channels_dictionary[key][0][3]}
-            logm['status'] = 'ok'
-            logm['level'] = 'channel'
-            logm['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E'+jstmag["loc"], "extended": ''}
+            logmch["net"] = jstmag["net"] 
+            logmch["sta"] = jstmag["sta"]
+            logmch["loc"] = jstmag["loc"]
+            logmch["cha"] = jstmag["cha"]
+            logmch['status'] = 'ok'
+            logmch['level'] = 'channel'
+            logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E', "extended": ''}
             if components_N[key][7] and components_N[key][8] and components_N[key][9]:
                resp["stationmagnitudes"].append(jstmag)
-            resp["log"].append(logm)
+            resp["log"].append(logmch)
     jstmag = copy.deepcopy(jstationmagnitude)
     if components_E[key]:
             logm = copy.deepcopy(jlogmessage)
+            logmch = copy.deepcopy(jlogmessagech)
             jstmag["net"] = n
             jstmag["sta"] = s
             jstmag["cha"] = c + 'E'
@@ -967,12 +973,16 @@ for key in components_N:
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": channels_dictionary[key][1][1]}
                jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": channels_dictionary[key][1][3]}
-            logm['status'] = 'ok'
-            logm['level'] = 'channel'
-            logm['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N'+jstmag["loc"], "extended": ''}
+            logmch["net"] = jstmag["net"] 
+            logmch["sta"] = jstmag["sta"]
+            logmch["loc"] = jstmag["loc"]
+            logmch["cha"] = jstmag["cha"]
+            logmch['status'] = 'ok'
+            logmch['level'] = 'channel'
+            logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N', "extended": ''}
             if components_E[key][7] and components_E[key][8] and components_E[key][9]:
                resp["stationmagnitudes"].append(jstmag)
-            resp["log"].append(logm)
+            resp["log"].append(logmch)
             #resp["stationmagnitudes"].append(jstmag)
     
 sys.stdout.write(json_pyml_response(resp))
