@@ -69,10 +69,10 @@ class MyParser(argparse.ArgumentParser):
 
 def parseArguments():
         parser=MyParser()	
-        parser.add_argument('--json',        default=None,          help='json config and amplitudes file (this option is ALTERNATIVE to --infile+--conf)')
-        parser.add_argument('--infile',      default=None,          help='pyamp-amplitudes.csv file full path (used only with --conf)')
-        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (used only with --infile)')
-        parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event (only used with --infile+--conf)')
+        parser.add_argument('--json',        default=None,          help='json config and amplitudes file (this option is ALTERNATIVE to --csv and --conf)')
+        parser.add_argument('--csv',         default=None,          help='pyamp-amplitudes.csv file full path (used only with --conf)')
+        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (used only with --csv)')
+        parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event (only used with --csv and --conf)')
         parser.add_argument('--dbona_corr',  default='dbcor.csv',   help='Input file with DiBona Stations corrections')
         parser.add_argument('--clipped_info',help='Input file with information on clipped channels')
         if len(sys.argv)==1:
@@ -350,14 +350,22 @@ def standard_pyml_load(infile,eventid,conf_file):
        sys.stderr.write(("\n"+str(e)+"\n\n"))
        sys.exit(1)
    try:
-       magnitudes_out=str(eventid)+'_'+eval(filenames_parameters['magnitudes'])
-       log_out=str(eventid)+'_'+eval(filenames_parameters['log'])
+       mf=eval(filenames_parameters['magnitudes'])
+       lf=eval(filenames_parameters['log'])
+       if mf:
+          magnitudes_out=open(str(eventid)+'_'+str(mf),'w')
+       else:
+          magnitudes_out=open(str(eventid)+'_pyml_magnitudes.out','w')
+       if lf:
+          log_out=open(str(eventid)+'_'+str(lf),'w')
+       else:
+          log_out=open(str(eventid)+'_pyml_general.log','w')
    except Exception as e:
        sys.stderr.write(("\n"+str(e)+"\n\n"))
        sys.exit(1)
    
    #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
-   dfa=pandas.read_csv(args.infile,sep=';',index_col=False)
+   dfa=pandas.read_csv(args.csv,sep=';',index_col=False)
    
    # Here we load the basic condition to decide if to proceed or not
    # If there is no P do we proceed with theoretical or skip the channel?
@@ -556,18 +564,16 @@ args = parseArguments()
 ############## PYML works either in CSV in/out or JSON in/out) #############################################################
 ### IF no JSON argument is given, pyml works reading and writing csv files, with configuration loaded from a dictionary file
 if not args.json:
-   infile=args.infile
+   infile=args.csv
    conf_file = args.conf
    eventid=args.eventid
    dfa,magnitudes_out,log_out,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file)
    if dfa.empty:
-      sys.stderr.write("The given input pyamp file "+args.infile+" was incomplete\n")
+      sys.stderr.write("The given input pyamp file "+infile+" was incomplete\n")
       sys.exit()
-### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
-   # Files out
-   magnitudes_out=config['iofilenames']['magnitudes']
-   log_out=config['iofilenames']['log']
+   print(dfa)
 else:
+   ### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
    if os.path.exists(args.json):
       json_in=pandas.read_json(args.json)
       dfa,config,origin = json_pyml_load(json_in)
@@ -606,14 +612,6 @@ else:
 if args.clipped_info:
    clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
 
-if log_out:
-   log_out=open(log_out,'w')
-#else:
-#   log_out=sys.stderr
-#if args.json:
-#   log_out.write("Working on json input\n")
-#else:
-#   log_out.write("Working on standard pyamp input\n")
 cmp_keys=set()
 components_N={}
 components_E={}
