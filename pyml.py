@@ -366,6 +366,7 @@ def standard_pyml_load(infile,eventid,conf_file):
    
    #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
    dfa=pandas.read_csv(args.csv,sep=';',index_col=False)
+   dfa.columns = dfa.columns.str.lower()
    
    # Here we load the basic condition to decide if to proceed or not
    # If there is no P do we proceed with theoretical or skip the channel?
@@ -633,28 +634,16 @@ km=1000.
 #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
 start_time = time.perf_counter()
 for index, row in dfa.iterrows():
+    net = row['net']
+    sta = row['sta']
+    loc = row['loc']
+    cha = row['cha']
     try:
-        net = str(row['Net'])
-    except:
-        net = row['net']
-    try:
-        sta = str(row['Sta'])
-    except:
-        sta = row['sta']
-    try:
-        loc = str(row['Loc'])
-    except:
-        loc = row['loc']
-    try:
-        cha = str(row['Cha'])
-    except:
-        cha = row['cha']
-    try:
-        corner_low=float(row['LoCo'])
+        corner_low=float(row['loco'])
     except:
         corner_low=False
     try:
-        corner_high=float(row['HiCo'])
+        corner_high=float(row['hico'])
     except:
         corner_high=False
     if args.clipped_info:
@@ -676,14 +665,14 @@ for index, row in dfa.iterrows():
     cmp_keys.add(components_key)
 # Channel Magnitudes calculations and in case of event_magnitude argument on ... station magnitude calculation
 #net   sta  cha loc        lat      lon  elev   amp1                     time1   amp2                     time2
+    stla=False if pandas.isna(row['lat']) else float(row['lat'])
+    stlo=False if pandas.isna(row['lon']) else float(row['lon'])
+    stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
     try:
-        hypo_dist = row['IpoDistance(km)']
-        epi_dist = row['EpiDistance(km)']
+        hypo_dist = row['ipodistance(km)']
+        epi_dist = row['epidistance(km)']
     except:
         #calcolo le distanze
-        stla=False if pandas.isna(row['lat']) else float(row['lat'])
-        stlo=False if pandas.isna(row['lon']) else float(row['lon'])
-        stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
         evla=float(origin['lat'])
         evlo=float(origin['lon'])
         evdp=float(origin['depth'])
@@ -703,20 +692,20 @@ for index, row in dfa.iterrows():
     if args.json:
        unit=1 #db units
     try:
-        minamp=row['MinAmp(m)']*unit
-        time_minamp=row['MinAmpTime']
+        minamp=row['minamp(m)']*unit
+        time_minamp=row['minamptime']
     except:
         minamp=row['amp1']*unit
         time_minamp=row['time1']
     try:
-        maxamp=row['MaxAmp(m)']*unit
-        time_maxamp=row['MaxAmpTime']
+        maxamp=row['maxamp(m)']*unit
+        time_maxamp=row['maxamptime']
     except:
         maxamp=row['amp2']*unit
         time_maxamp=row['time2']
     amp = abs(maxamp-minamp)/2
     try:
-        met=row['Method']
+        met=row['method']
     except:
         met='ingv'
     components_key_met=components_key+'_'+met
