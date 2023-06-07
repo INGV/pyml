@@ -195,13 +195,13 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
            else:
               if log_out:
                  log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
-                 logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
-                 logmch['cha'] = logmch['cha']+'-'
-                 logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
-                 logmch['status'] = 'warning' 
-                 logmch['level'] = 'station' 
-                 logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist")), "extended": ' '.join(("Distance is",str(ipodist),"km"))}
-                 resp["log"].append(logmch)
+              logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
+              logmch['cha'] = logmch['cha']+'-'
+              logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
+              logmch['status'] = 'warning' 
+              logmch['level'] = 'station' 
+              logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist")), "extended": ' '.join(("Distance is",str(ipodist),"km"))}
+              resp["log"].append(logmch)
         else:
            if log_out:
               log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
@@ -483,7 +483,7 @@ class DataEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 def json_response_structure():
-    null=False
+    null=''
     response = {
                 "random_string": null,
                 "magnitudes": {},
@@ -844,17 +844,24 @@ if magnitudes_out:
 
 # JSON WRITE
 jmags = copy.deepcopy(jmagnitudes)
-jhb = copy.deepcopy(jemag)
-jhb['ml'] = ma_mlh
-jhb['std'] = ma_stdh
-jhb['totsta'] = ma_ns_s_h
-jhb['usedsta'] = ma_nsh
+empty_jemag = {}
+if ma_mlh:
+   jhb = copy.deepcopy(jemag)
+   jhb['ml'] = ma_mlh
+   jhb['std'] = ma_stdh
+   jhb['totsta'] = ma_ns_s_h
+   jhb['usedsta'] = ma_nsh
+else:
+   jhb = copy.deepcopy(empty_jemag)
 jmags["hb"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
-jhb = copy.deepcopy(jemag)
-jhb['ml'] = ma_mld
-jhb['std'] = ma_stdd
-jhb['totsta'] = ma_ns_s_d
-jhb['usedsta'] = ma_nsd
+if ma_mld:
+   jhb = copy.deepcopy(jemag)
+   jhb['ml'] = ma_mld
+   jhb['std'] = ma_stdd
+   jhb['totsta'] = ma_ns_s_d
+   jhb['usedsta'] = ma_nsd
+else:
+   jhb = copy.deepcopy(empty_jemag)
 jmags["db"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
 jmags["ampmethod"] = met
 jmags["magmethod"] = mag_mean_type
@@ -928,6 +935,9 @@ for key in components_N:
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": float(channels_dictionary[key][0][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": float(channels_dictionary[key][0][3])}
+            else:
+               jstmag["hb"] = {}
+               jstmag["db"] = {}
             logmch["net"] = jstmag["net"] 
             logmch["sta"] = jstmag["sta"]
             logmch["loc"] = jstmag["loc"]
@@ -959,6 +969,10 @@ for key in components_N:
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": float(channels_dictionary[key][1][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": float(channels_dictionary[key][1][3])}
+            else:
+               jstmag["hb"] = {}
+               jstmag["db"] = {}
+               
             logmch["net"] = jstmag["net"] 
             logmch["sta"] = jstmag["sta"]
             logmch["loc"] = jstmag["loc"]
