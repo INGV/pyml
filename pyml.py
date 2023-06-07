@@ -926,8 +926,8 @@ for key in components_N:
             if components_N[key][9]:
                jstmag["elev"] = components_N[key][9]
             if channels_dictionary[key]:
-               jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": channels_dictionary[key][0][1]}
-               jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": channels_dictionary[key][0][3]}
+               jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": float(channels_dictionary[key][0][1])}
+               jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": float(channels_dictionary[key][0][3])}
             logmch["net"] = jstmag["net"] 
             logmch["sta"] = jstmag["sta"]
             logmch["loc"] = jstmag["loc"]
@@ -957,8 +957,8 @@ for key in components_N:
             if components_E[key][9]:
                jstmag["elev"] = components_E[key][9]
             if channels_dictionary[key]:
-               jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": channels_dictionary[key][1][1]}
-               jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": channels_dictionary[key][1][3]}
+               jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": float(channels_dictionary[key][1][1])}
+               jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": float(channels_dictionary[key][1][3])}
             logmch["net"] = jstmag["net"] 
             logmch["sta"] = jstmag["sta"]
             logmch["loc"] = jstmag["loc"]
