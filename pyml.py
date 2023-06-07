@@ -69,11 +69,12 @@ class MyParser(argparse.ArgumentParser):
 
 def parseArguments():
         parser=MyParser()	
-        parser.add_argument('--json',        default=None,          help='json config and amplitudes file (this option is ALTERNATIVE to --csv and --conf)')
-        parser.add_argument('--csv',         default=None,          help='pyamp-amplitudes.csv file full path (used only with --conf)')
-        parser.add_argument('--conf',        default='./pyml.conf', help='A file containing sections and related parameters (used only with --csv)')
-        parser.add_argument('--eventid',     default='0',           help='Unique identifier of the event (only used with --csv and --conf)')
-        parser.add_argument('--dbona_corr',  default='dbcor.csv',   help='Input file with DiBona Stations corrections')
+        parser.add_argument('--in_file_name',       default=None,          help='Name (and path) of inpout amplitudes file')
+        parser.add_argument('--in_file_format',     default='json',        help='options are json (data and config in one single file) or csv (pyamp format): this latter needs also the --conf argument')
+        parser.add_argument('--conf',               default=None,          help='A file containing sections and related parameters (used only with --csv)')
+        parser.add_argument('--out_format',         default='json',        help='options are json or txt')
+        parser.add_argument('--eventid',            default='0',           help='Unique identifier of the event (only used with --csv_in and --conf)')
+        parser.add_argument('--dbona_corr',         default='dbcor.csv',   help='Input file with DiBona Stations corrections')
         parser.add_argument('--clipped_info',help='Input file with information on clipped channels')
         if len(sys.argv)==1:
             parser.print_help()
@@ -327,7 +328,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     vlen_stop = round(np_sum(weights),2)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights,whuber_fail
 
-def standard_pyml_load(infile,eventid,conf_file):
+def standard_pyml_load(infile,eventid,conf_file,log_out):
    # Now loading the configuration file
    if os.path.exists(conf_file) and os.path.getsize(conf_file) > 0:
       paramfile=conf_file
@@ -337,35 +338,29 @@ def standard_pyml_load(infile,eventid,conf_file):
    confObj = cp.ConfigParser()
    confObj.read(paramfile)
 
-   # Here we load some basic filenames where pyamp elaboration is written
-   # At present only outputs are stored here but this section is intended
-   # to also host input filenames if usefull or needed (after minor changes
-   # to pyamp
-   # Note:
-   #     when a filename is set to False the output is sent to sys.stdout
-   #     with the exception of log files which output is sent to sys.stderr
-   try:
-       filenames_parameters=get_config_dictionary(confObj, 'iofilenames')
-   except Exception as e:
-       sys.stderr.write(("\n"+str(e)+"\n\n"))
-       sys.exit(1)
-   try:
-       mf=eval(filenames_parameters['magnitudes'])
-       lf=eval(filenames_parameters['log'])
-       if mf:
-          magnitudes_out=open(str(eventid)+'_'+str(mf),'w')
-       else:
-          magnitudes_out=open(str(eventid)+'_pyml_magnitudes.out','w')
-       if lf:
-          log_out=open(str(eventid)+'_'+str(lf),'w')
-       else:
-          log_out=open(str(eventid)+'_pyml_general.log','w')
-   except Exception as e:
-       sys.stderr.write(("\n"+str(e)+"\n\n"))
-       sys.exit(1)
+   #try:
+   #    filenames_parameters=get_config_dictionary(confObj, 'iofilenames')
+   #except Exception as e:
+   #    sys.stderr.write(("\n"+str(e)+"\n\n"))
+   #    sys.exit(1)
+   #try:
+   #    mf=eval(filenames_parameters['magnitudes'])
+   #    lf=eval(filenames_parameters['log'])
+   #    if mf:
+   #       magnitudes_out=open(str(eventid)+'_'+str(mf),'w')
+   #    else:
+   #       magnitudes_out=open(str(eventid)+'_pyml_magnitudes.out','w')
+   #    if lf:
+   #       log_out=open(str(eventid)+'_'+str(lf),'w')
+   #    else:
+   #       log_out=open(str(eventid)+'_pyml_general.log','w')
+   #except Exception as e:
+   #    sys.stderr.write(("\n"+str(e)+"\n\n"))
+   #    sys.exit(1)
+    
    
    #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
-   dfa=pandas.read_csv(args.csv,sep=';',index_col=False)
+   dfa=pandas.read_csv(args.csv_in,sep=';',index_col=False)
    dfa.columns = dfa.columns.str.lower()
    
    # Here we load the basic condition to decide if to proceed or not
@@ -459,7 +454,7 @@ def standard_pyml_load(infile,eventid,conf_file):
    except:
       log_out.write("No parameter 'outliers_cutoff' in section 'event_magnitude' of config file")
       sys.exit()
-   return dfa,magnitudes_out,log_out,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff 
+   return dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff 
 
 def json_pyml_load(json_in):
    try:
@@ -562,28 +557,32 @@ def json_pyml_response(r):
 main_start_time = time.perf_counter()
 args = parseArguments()
 
+if args.out_format.lower() == 'txt':
+   magnitudes_out=sys.stdout
+   log_out=sys.stderr
+else:
+   magnitudes_out=False
+   log_out=False
+
 ############## PYML works either in CSV in/out or JSON in/out) #############################################################
 ### IF no JSON argument is given, pyml works reading and writing csv files, with configuration loaded from a dictionary file
-if not args.json:
-   infile=args.csv
+if args.in_file_format.lower() == 'csv':
+   infile=args.in_file_name
    conf_file = args.conf
    eventid=args.eventid
-   dfa,magnitudes_out,log_out,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file)
+   dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file,log_out)
    if dfa.empty:
       sys.stderr.write("The given input pyamp file "+infile+" was incomplete\n")
       sys.exit()
-   print(dfa)
 else:
    ### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
-   if os.path.exists(args.json):
-      json_in=pandas.read_json(args.json)
+   if os.path.exists(args.in_file_name):
+      json_in=pandas.read_json(args.in_file_name)
       dfa,config,origin = json_pyml_load(json_in)
       eventid=0
       if dfa.empty or not config or not origin:
          sys.stderr.write("The given input json file "+args.json+" was incomplete\n")
          sys.exit()
-      magnitudes_out=False
-      log_out=False
    else:
       sys.stderr.write("No Json input file "+args.json+" found: exit\n")
       sys.exit()
@@ -689,7 +688,7 @@ for index, row in dfa.iterrows():
     ml = [False]*2
     #minamp,maxamp,time_minamp,time_maxamp,amp,met = amp_method[2:]
     unit=1000 # pyamp units
-    if args.json:
+    if args.in_file_format == 'json':
        unit=1 #db units
     try:
         minamp=row['minamp(m)']*unit
@@ -831,8 +830,8 @@ if not mlhb and not mldb:
 ######################################################
 #          Writing magnitudes.csv file               #
 ######################################################
-if magnitudes_out:
-   magnitudes_out=open(magnitudes_out,'w')
+#if magnitudes_out:
+#   magnitudes_out=open(magnitudes_out,'w')
 #else:
 #   magnitudes_out=sys.stdout
 
@@ -972,7 +971,8 @@ for key in components_N:
             resp["log"].append(logmch)
             #resp["stationmagnitudes"].append(jstmag)
     
-sys.stdout.write(json_pyml_response(resp))
+if args.out_format == 'json':
+   sys.stdout.write(json_pyml_response(resp))
 
 # Now closing all output files
 if magnitudes_out:
