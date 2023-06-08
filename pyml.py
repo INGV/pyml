@@ -141,6 +141,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
     #     'ari' --> the artihmetic mean is computed
     ml_set=[]
     mtytxt='HuttonBoore' if mty==0 else 'DiBona'
+    midi = 99999.0 # Minimum distance is needed and here below calculated to be used in the mag quality definition
     for k in keys:
         kk=k+'_'+mtd
         logm = copy.deepcopy(jlogmessage)
@@ -182,6 +183,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
                        mm = dibona(mean_amp,ipodist,corr,stc)
                        mtytxt = 'DiBona'
                  ml_set.append([kk,mm])
+                 midi = epidist if epidist < midi else midi
               else:
                  if log_out:
                     log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
@@ -213,7 +215,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
            missing="N" if kk not in cmpn else "E"
            logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to missing channel")), "extended": ' '.join(("Missing channel is",missing))}
            resp["log"].append(logmch)
-    return ml_set
+    return ml_set,midi
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 # Calculating the weighted standard deviation
@@ -327,6 +329,31 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
           n += 1
     vlen_stop = round(np_sum(weights),2)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights,whuber_fail
+
+def char_quality(nu,nw,d,m):
+    #nu =  number of used stations
+    #nw =  weighted number of used stations
+    # d = minimum distance km
+    # m = magnitude
+    # defining position 1
+    if d <= 50. and nu > (m*10.0+1):
+       q1 = 'A'
+    elif d > 50. and d <= 100.0 and nu > (m*7.5+1):
+       q1 = 'B'
+    elif d > 100. and d <= 150.0 and nu > (m*5.0+1):
+       q1 = 'C'
+    else:
+       q1 = 'D'
+    # defining position 2
+    if d <= 50. and nw > (m*10.0+1):
+       q2 = 'A'
+    elif d > 50. and d <= 100.0 and nw > (m*7.5+1):
+       q2 = 'B'
+    elif d > 100. and d <= 150.0 and nw > (m*5.0+1):
+       q2 = 'C'
+    else:
+       q2 = 'D'
+    return ''.join((q1,q2))
 
 def standard_pyml_load(infile,eventid,conf_file,log_out):
    # Now loading the configuration file
@@ -521,7 +548,8 @@ def json_response_structure():
             "ml": null,
             "std": null,
             "totsta": null,
-            "usedsta": null
+            "usedsta": null,
+            "quality": '--'
            }
             
     stationmagnitude = {
@@ -748,7 +776,7 @@ resp = copy.deepcopy(jresponse)
 resp['random_string'] = 'github/ingv/pyml'
 # Hutton and Boore
 #start_time = time.perf_counter()
-mean_hb_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
+mean_hb_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
 #end_time = time.perf_counter()
 #execution_time = end_time - start_time
 #if log_out:
@@ -785,7 +813,7 @@ else:
       resp["log"].append(logm)
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
-mean_db_ml_sta = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
+mean_db_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
 if len(mean_db_ml_sta) == 0:
    msg='Dibona List is empty'
    log_out.write(msg+"\n")
@@ -851,6 +879,7 @@ if ma_mlh:
    jhb['std'] = ma_stdh
    jhb['totsta'] = ma_ns_s_h
    jhb['usedsta'] = ma_nsh
+   jhb['quality'] = char_quality(ma_ns_s_h,ma_nsh,mindist,ma_mlh)
 else:
    jhb = copy.deepcopy(empty_jemag)
 jmags["hb"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
@@ -860,6 +889,7 @@ if ma_mld:
    jhb['std'] = ma_stdd
    jhb['totsta'] = ma_ns_s_d
    jhb['usedsta'] = ma_nsd
+   jhb['quality'] = char_quality(ma_ns_s_d,ma_nsd,mindist,ma_mld)
 else:
    jhb = copy.deepcopy(empty_jemag)
 jmags["db"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
