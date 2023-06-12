@@ -515,28 +515,38 @@ def json_response_structure():
                 "random_string": null,
                 "magnitudes": {},
                 "stationmagnitudes": [],
-                "log": []
+                "log": {}
                }
-    logmessage_generic = {
-             "level": null,
-             "status": null,
-             "info": {
-                   "summary": null,
-                   "extended": null
-             }, 
-            }
-    logmessage_channel = {
-             "net": null,
-             "sta": null,
-             "cha": null,
-             "loc": null,
-             "level": null,
-             "status": null,
-             "info": {
-                   "summary": null,
-                   "extended": null
-             }, 
-            }
+    
+    log = {
+           magnitude = {
+                     "hb": {
+                            "status": null,   # eg: "warning"
+                            "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist"
+                            "extended": null, # eg: "Distance is 6.045133888690926 km"
+                           },
+                     "db": {
+                            "status": null,   # eg: "warning",
+                            "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
+                            "extended": null, # eg: "Distance is 6.045133888690926 km"
+                           }
+           stationmagnitudes = []
+          }
+    log_stationmagnitude = {
+                            "net": null,      # eg: "IV"
+                            "sta": null,      # eg: "FDMO",
+                            "loc": null,      # eg: "--",
+                            "status": null,   # eg: "warning",
+                            "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
+                            "extended": null, # eg: "Distance is 6.045133888690926 km"
+                            "channels": []
+                           }
+    log_stationmagnitude_channel = {
+                                     "cha": null,      # "HHZ",
+                                     "status": null,   # "ok",
+                                     "summary": null,  # "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
+                                     "extended": null, # "Distance is 6.045133888690926 km"
+                                   }
     magnitudes = {
                   "hb": {},
                   "db": {},
