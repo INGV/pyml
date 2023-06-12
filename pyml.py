@@ -128,7 +128,7 @@ def dibona(a,d,s,uc):
     return m
 
 
-def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmessage,jlogmessagech):
+def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlog,jlog_stamag,jlog_stamag_cha):
     # mtd is the peakmethod
     # mty is the huttonboore 0, dibona 1
     # a channel cmpn is [ml,amp,tr.dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
@@ -144,21 +144,20 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlogmes
     midi = 99999.0 # Minimum distance is needed and here below calculated to be used in the mag quality definition
     for k in keys:
         kk=k+'_'+mtd
-        logm = copy.deepcopy(jlogmessage)
-        logmch = copy.deepcopy(jlogmessagech)
+        logsm = copy.deepcopy(jlog_stamag)
+        logsmc = copy.deepcopy(jlog_stamag_cha)
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            if not cmpn[kk][2] or not cmpe[kk][2]:
               epidist = False
               ipodist = False
               if log_out:
                  log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
-              logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
-              logmch['cha'] = logmch['cha']+'-'
-              logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
-              logmch['status'] = 'critical'
-              logmch['level'] = 'station'
-              logmch['info'] = {"summary": "Station skipped due to stations coordinates missing", "extended": mtytxt }
-              resp["log"].append(logmch)
+              logsm['net'],logsm['sta'],logsm['loc'],logsm['cha'] = k.split('_')
+              logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
+              logsm['status'] = 'critical'
+              logsm['summary'] = "Station skipped due to stations coordinates missing"
+              logsm["extended"]: mtytxt
+              jlog['stationmagnitudes'].append(logsm)
               continue
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
            ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
@@ -519,7 +518,10 @@ def json_response_structure():
                }
     
     log = {
-           magnitude = {
+           "magnitude": {},
+           "stationmagnitudes": []
+          }
+    log_magnitude = {
                      "hb": {
                             "status": null,   # eg: "warning"
                             "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist"
@@ -530,12 +532,12 @@ def json_response_structure():
                             "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
                             "extended": null, # eg: "Distance is 6.045133888690926 km"
                            }
-           stationmagnitudes = []
-          }
+                    }
     log_stationmagnitude = {
                             "net": null,      # eg: "IV"
                             "sta": null,      # eg: "FDMO",
                             "loc": null,      # eg: "--",
+                            "cha": null,      # eg: "HH-",
                             "status": null,   # eg: "warning",
                             "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
                             "extended": null, # eg: "Distance is 6.045133888690926 km"
@@ -583,7 +585,7 @@ def json_response_structure():
                              "w": null
                          }
                         }
-    return response,logmessage_generic,logmessage_channel,magnitudes,stationmagnitude,emag
+    return response,log,log_magnitude,log_stationmagnitude,log_stationmagnitude_channel,magnitudes,stationmagnitude,emag
 
 def json_pyml_response(r):
     x=json.dumps(r,cls=DataEncoder)
@@ -781,86 +783,102 @@ for index, row in dfa.iterrows():
 #end_time = time.perf_counter()
 #execution_time = end_time - start_time
 
-jresponse,jlogmessage,jlogmessagech,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
+jresponse,jlog,jlog_mag,jlog_stamag,jlog_stamag_cha,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
 resp = copy.deepcopy(jresponse)
 resp['random_string'] = 'github/ingv/pyml'
 # Hutton and Boore
 #start_time = time.perf_counter()
-mean_hb_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
+mean_hb_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlog,jlog_stamag,jlog_stamag_cha)
 #end_time = time.perf_counter()
 #execution_time = end_time - start_time
 #if log_out:
 #   log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
+logm = copy.deepcopy(jlog_mag)
 if len(mean_hb_ml_sta) == 0:
-   msg='HuttonBoore List is empty'
+   msg_sts = 'critical'
+   msg_sum='HuttonBoore List is empty'
+   msg_ext = 'All the stations missing due to only one channel is present, or out of minmax distance'
    if log_out:
       log_out.write(msg+"\n")
    mlhb = False
-   logm = copy.deepcopy(jlogmessage)
-   logm['status'] = 'warning'
-   logm['level'] = 'event'
-   logm['info'] = {"summary": msg, "extended": 'All the stations missing due to only one channel is present, or out of minmax distance'}
-   resp["log"].append(logm)
 else:
    #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    mean_ml = list(list(zip(*mean_hb_ml_sta))[1])
    mean_ml_sta = np_asarray(list(list(zip(*mean_hb_ml_sta))[0]), dtype=object)
-   start_time = time.perf_counter()
    ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
-   end_time = time.perf_counter()
-   execution_time = end_time - start_time
-   if log_out:
-      log_out.write("calculate_event_ml HB: the execution time is: "+str(execution_time)+"\n")
-   mlhb = True
-   if wh_hb_fail:
+   if ma_mlh:
+      mlhb = True
+      if wh_hb_fail:
+         if log_out:
+            log_out.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
+         msg_sts='warning'
+         msg_sum="Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead"
+         msg_ext=""
+      else:
+         msg_sts='ok'
+         msg_sum=""
+         msg_ext=""
+   else:
+      mlhb = False
       if log_out:
-         log_out.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
-      msg="Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead"
-      logm = copy.deepcopy(jlogmessage)
-      logm['status'] = 'warning'
-      logm['level'] = 'event'
-      logm['info'] = {"summary": msg, "extended": ''}
-      resp["log"].append(logm)
+           log_out.write("Hutton&Boore: Both Weighted Huber Mean and Outliers Removal failed\n")
+      msg_sts='critical'
+      msg_sum="Hutton&Boore: Both Weighted Huber Mean and Outliers Removal failed"
+      msg_ext=""
+logm['hb']['status'] = msg_sts
+logm['hb']['summary'] = msg_sum
+logm['hb']['extended'] = msg_ext
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
-mean_db_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlogmessage,jlogmessagech)
+mean_db_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlog,jlog_stamag,jlog_stamag_cha)
 if len(mean_db_ml_sta) == 0:
-   msg='Dibona List is empty'
-   log_out.write(msg+"\n")
+   msg_sts = 'critical'
+   msg_sum='Dibona List is empty'
+   msg_ext = 'All the stations missing due to only one channel is present, or out of minmax distance'
+   if log_out:
+      log_out.write(msg+"\n")
    mldb = False
-   logm = copy.deepcopy(jlogmessage)
-   logm['status'] = 'warning'
-   logm['level'] = 'event'
-   logm['info'] = {"summary": msg, "extended": 'All the stations missing due to only one channel is present, or out of minmax distance'}
-   resp["log"].append(logm)
 else:
    #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    mean_ml = list(list(zip(*mean_db_ml_sta))[1])
    mean_ml_sta = np_asarray(list(list(zip(*mean_db_ml_sta))[0]), dtype=object)
-   start_time = time.perf_counter()
    ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
-   end_time = time.perf_counter()
-   execution_time = end_time - start_time
-   if log_out:
-      log_out.write("calculate_event_ml DB: the execution time is: "+str(execution_time)+"\n")
-   mldb = True
-   if wh_db_fail:
+   if ma_mld:
+      mldb = True
+      if wh_db_fail:
+         if log_out:
+            log_out.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
+         msg_st ="warning"
+         msg_sum="Di Bona: Weighted Huber Mean failed, Outliers Removal used instead"
+         msg_ext=""
+      else:
+         msg_sts ="ok"
+         msg_sum=""
+         msg_ext=""
+   else:
+      mldb = False
       if log_out:
-         log_out.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
-      msg="Di Bona: Weighted Huber Mean failed, Outliers Removal used instead"
-      logm = copy.deepcopy(jlogmessage)
-      logm['status'] = 'warning'
-      logm['level'] = 'event'
-      logm['info'] = {"summary": msg, "extended": ''}
-      resp["log"].append(logm)
+           log_out.write("Di Bona: Both Weighted Huber Mean and Outliers Removal failed\n")
+      msg_sts='supercritical'
+      msg_sum="Di Bona: Both Weighted Huber Mean and Outliers Removal failed"
+      msg_ext=""
+logm['db']['status'] = msg_sts
+logm['db']['summary'] = msg_sum
+logm['db']['extended'] = msg_ext
+
+resp["log"]['magnitude'] = logm
+
 if not mlhb:
-   log_out.write("Hutton&Boore ML was impossible to calculate\n")
+   if log_out:
+      log_out.write("Hutton&Boore ML was impossible to calculate\n")
    sys.stdout.write(json_pyml_response(resp))
 if not mldb:
-   log_out.write("Di Bona ML was impossible to calculate\n")
+   if log_out:
+      log_out.write("Di Bona ML was impossible to calculate\n")
    sys.stdout.write(json_pyml_response(resp))
 if not mlhb and not mldb:
-   log_out.write("Neither Hutton&Boore nor Di Bona ML was impossible to calculate\n")
+   if log_out:
+      log_out.write("Neither Hutton&Boore nor Di Bona ML was impossible to calculate\n")
    sys.stdout.write(json_pyml_response(resp))
    sys.exit()
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
@@ -956,8 +974,8 @@ for key in components_N:
     n,s,l,c,m = key.split('_')
     jstmag = copy.deepcopy(jstationmagnitude)
     if components_N[key]:
-            logm = copy.deepcopy(jlogmessage)
-            logmch = copy.deepcopy(jlogmessagech)
+            #logm = copy.deepcopy(jlogmessage)
+            #logmch = copy.deepcopy(jlogmessagech)
             jstmag["net"] = n
             jstmag["sta"] = s
             jstmag["cha"] = c + 'N'
@@ -978,20 +996,20 @@ for key in components_N:
             else:
                jstmag["hb"] = {}
                jstmag["db"] = {}
-            logmch["net"] = jstmag["net"] 
-            logmch["sta"] = jstmag["sta"]
-            logmch["loc"] = jstmag["loc"]
-            logmch["cha"] = jstmag["cha"]
-            logmch['status'] = 'ok'
-            logmch['level'] = 'channel'
-            logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E', "extended": ''}
+            #logmch["net"] = jstmag["net"] 
+            #logmch["sta"] = jstmag["sta"]
+            #logmch["loc"] = jstmag["loc"]
+            #logmch["cha"] = jstmag["cha"]
+            #logmch['status'] = 'ok'
+            #logmch['level'] = 'channel'
+            #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E', "extended": ''}
             if components_N[key][7] and components_N[key][8] and components_N[key][9]:
                resp["stationmagnitudes"].append(jstmag)
-            resp["log"].append(logmch)
+            #resp["log"].append(logmch)
     jstmag = copy.deepcopy(jstationmagnitude)
     if components_E[key]:
-            logm = copy.deepcopy(jlogmessage)
-            logmch = copy.deepcopy(jlogmessagech)
+            #logm = copy.deepcopy(jlogmessage)
+            #logmch = copy.deepcopy(jlogmessagech)
             jstmag["net"] = n
             jstmag["sta"] = s
             jstmag["cha"] = c + 'E'
@@ -1013,16 +1031,16 @@ for key in components_N:
                jstmag["hb"] = {}
                jstmag["db"] = {}
                
-            logmch["net"] = jstmag["net"] 
-            logmch["sta"] = jstmag["sta"]
-            logmch["loc"] = jstmag["loc"]
-            logmch["cha"] = jstmag["cha"]
-            logmch['status'] = 'ok'
-            logmch['level'] = 'channel'
-            logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N', "extended": ''}
+            #logmch["net"] = jstmag["net"] 
+            #logmch["sta"] = jstmag["sta"]
+            #logmch["loc"] = jstmag["loc"]
+            #logmch["cha"] = jstmag["cha"]
+            #logmch['status'] = 'ok'
+            #logmch['level'] = 'channel'
+            #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N', "extended": ''}
             if components_E[key][7] and components_E[key][8] and components_E[key][9]:
                resp["stationmagnitudes"].append(jstmag)
-            resp["log"].append(logmch)
+            #resp["log"].append(logmch)
             #resp["stationmagnitudes"].append(jstmag)
     
 if args.out_format == 'json':
