@@ -189,14 +189,14 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
                  logsm['status'] = 'warning'
                  logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station skipped due to time distance between min and max amp larger than",str(dp)))
                  logsm['extended'] = ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))
-                 logsms.append(logsm)
+                 #logsms.append(logsm)
            else:
               if log_out:
                  log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
               logsm['status'] = 'warning' 
               logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist"))
               logsm['extended'] = ' '.join(("Distance is",str(ipodist),"km"))
-              logsms.append(logsm)
+              #logsms.append(logsm)
         elif kk not in cmpn or kk not in cmpe:
            if log_out:
               log_out.write(' '.join(("Station skipped due to missing channel N",str(kk),'\n')))
@@ -626,10 +626,12 @@ else:
       dfa,config,origin = json_pyml_load(json_in)
       eventid=0
       if dfa.empty or not config or not origin:
-         sys.stderr.write("The given input json file "+args.json+" was incomplete\n")
+         if log_out:
+            sys.stderr.write("The given input json file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete\n")
          sys.exit()
    else:
-      sys.stderr.write("No Json input file "+args.json+" found: exit\n")
+      if log_out:
+         sys.stderr.write("No input file "+args.in_file_name+" format "+args.in_file_format.lower()+" found: exit\n")
       sys.exit()
 
    # Preconditions
