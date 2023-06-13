@@ -128,7 +128,7 @@ def dibona(a,d,s,uc):
     return m
 
 
-def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlog,jlog_stamag,jlog_stamag_cha):
+def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_stamag,jlog_stamag_cha):
     # mtd is the peakmethod
     # mty is the huttonboore 0, dibona 1
     # a channel cmpn is [ml,amp,tr.dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
@@ -137,27 +137,27 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlog,jl
     #     'meanmag"--> only the mean of the channels's ML is computed
     #     'meanamp"--> only the ML based on the mean of the channels's amplitudes is computed
     #     in the second case, amt is evaluated:
-    #     'geo' --> the geometrical mean is computed
+    #    'geo' --> the geometrical mean is computed
     #     'ari' --> the artihmetic mean is computed
     ml_set=[]
     mtytxt='HuttonBoore' if mty==0 else 'DiBona'
     midi = 99999.0 # Minimum distance is needed and here below calculated to be used in the mag quality definition
     for k in keys:
+        n,s,l,c = k.split('_')
         kk=k+'_'+mtd
         logsm = copy.deepcopy(jlog_stamag)
         logsmc = copy.deepcopy(jlog_stamag_cha)
+        logsm['net'],logsm['sta'],logsm['loc'] = [n,s,l]
+        logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            if not cmpn[kk][2] or not cmpe[kk][2]:
               epidist = False
               ipodist = False
               if log_out:
                  log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
-              logsm['net'],logsm['sta'],logsm['loc'],logsm['cha'] = k.split('_')
-              logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
-              logsm['status'] = 'critical'
               logsm['summary'] = "Station skipped due to stations coordinates missing"
               logsm["extended"]: mtytxt
-              jlog['stationmagnitudes'].append(logsm)
+              logsms.append(logsm)
               continue
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
            ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
@@ -186,35 +186,41 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,resp,jlog,jl
               else:
                  if log_out:
                     log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
-                 logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
-                 logmch['cha'] = logmch['cha']+'-'
-                 logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
-                 logmch['status'] = 'warning'
-                 logmch['level'] = 'station'
-                 logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to time distance between min and max amp larger than",str(dp))), "extended": ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))}
-                 resp["log"].append(logmch)
+                 logsm['status'] = 'warning'
+                 logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station skipped due to time distance between min and max amp larger than",str(dp)))
+                 logsm['extended'] = ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))
+                 logsms.append(logsm)
            else:
               if log_out:
                  log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
-              logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
-              logmch['cha'] = logmch['cha']+'-'
-              logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
-              logmch['status'] = 'warning' 
-              logmch['level'] = 'station' 
-              logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist")), "extended": ' '.join(("Distance is",str(ipodist),"km"))}
-              resp["log"].append(logmch)
-        else:
+              logsm['status'] = 'warning' 
+              logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist"))
+              logsm['extended'] = ' '.join(("Distance is",str(ipodist),"km"))
+              logsms.append(logsm)
+        elif kk not in cmpn or kk not in cmpe:
            if log_out:
-              log_out.write(' '.join(("Station skipped due to missing channel ",str(kk),'\n')))
-           logmch['net'],logmch['sta'],logmch['loc'],logmch['cha'] = k.split('_')
-           logmch['cha'] = logmch['cha']+'-'
-           logmch['loc'] = "--" if logmch['loc'] == "None" else logmch['loc']
-           logmch['status'] = 'warning' 
-           logmch['level'] = 'channel' 
-           missing="N" if kk not in cmpn else "E"
-           logmch['info'] = {"summary": ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to missing channel")), "extended": ' '.join(("Missing channel is",missing))}
-           resp["log"].append(logmch)
-    return ml_set,midi
+              log_out.write(' '.join(("Station skipped due to missing channel N",str(kk),'\n')))
+           logsm['status'] = 'critical'
+           logsm['summary'] = 'Station skipped due to missing channel'
+           logsm['extended'] = 'ML ' + mtytxt
+           if kk not in cmpn:
+              logsmc['cha'] = c+'N'
+              logsmc['status'] = 'critical' 
+              logsmc['extended'] = 'missing' 
+           else:
+              logsmc['cha'] = c+'N'
+              logsmc['status'] = 'ok' 
+           logsm['channels'].append(logsmc)
+           if kk not in cmpe:
+              logsmc['cha'] = c+'E'
+              logsmc['status'] = 'critical' 
+              logsmc['extended'] = 'missing' 
+           else:
+              logsmc['cha'] = c+'N'
+              logsmc['status'] = 'ok' 
+           logsm['channels'].append(logsmc)
+        logsms.append(logsm)
+    return ml_set,midi,logsms
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 # Calculating the weighted standard deviation
@@ -354,7 +360,7 @@ def char_quality(nu,nw,d,m):
        q2 = 'D'
     return ''.join((q1,q2))
 
-def standard_pyml_load(infile,eventid,conf_file,log_out):
+def standard_pyml_load(infile,eventid,conf_file,log_out,f):
    # Now loading the configuration file
    if os.path.exists(conf_file) and os.path.getsize(conf_file) > 0:
       paramfile=conf_file
@@ -386,7 +392,7 @@ def standard_pyml_load(infile,eventid,conf_file,log_out):
     
    
    #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
-   dfa=pandas.read_csv(args.csv_in,sep=';',index_col=False)
+   dfa=pandas.read_csv(f,sep=';',index_col=False)
    dfa.columns = dfa.columns.str.lower()
    
    # Here we load the basic condition to decide if to proceed or not
@@ -537,7 +543,6 @@ def json_response_structure():
                             "net": null,      # eg: "IV"
                             "sta": null,      # eg: "FDMO",
                             "loc": null,      # eg: "--",
-                            "cha": null,      # eg: "HH-",
                             "status": null,   # eg: "warning",
                             "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
                             "extended": null, # eg: "Distance is 6.045133888690926 km"
@@ -610,7 +615,7 @@ if args.in_file_format.lower() == 'csv':
    infile=args.in_file_name
    conf_file = args.conf
    eventid=args.eventid
-   dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file,log_out)
+   dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file,log_out,infile)
    if dfa.empty:
       sys.stderr.write("The given input pyamp file "+infile+" was incomplete\n")
       sys.exit()
@@ -783,17 +788,20 @@ for index, row in dfa.iterrows():
 #end_time = time.perf_counter()
 #execution_time = end_time - start_time
 
+# JSON STRUCTURE DEEPCOPY
 jresponse,jlog,jlog_mag,jlog_stamag,jlog_stamag_cha,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
 resp = copy.deepcopy(jresponse)
+log = copy.deepcopy(jlog)
+logm = copy.deepcopy(jlog_mag)
 resp['random_string'] = 'github/ingv/pyml'
+
 # Hutton and Boore
 #start_time = time.perf_counter()
-mean_hb_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,resp,jlog,jlog_stamag,jlog_stamag_cha)
+mean_hb_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
 #end_time = time.perf_counter()
 #execution_time = end_time - start_time
 #if log_out:
 #   log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
-logm = copy.deepcopy(jlog_mag)
 if len(mean_hb_ml_sta) == 0:
    msg_sts = 'critical'
    msg_sum='HuttonBoore List is empty'
@@ -830,7 +838,7 @@ logm['hb']['summary'] = msg_sum
 logm['hb']['extended'] = msg_ext
 #mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 # Di Bona
-mean_db_ml_sta,min_dist = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,resp,jlog,jlog_stamag,jlog_stamag_cha)
+mean_db_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
 if len(mean_db_ml_sta) == 0:
    msg_sts = 'critical'
    msg_sum='Dibona List is empty'
@@ -867,6 +875,7 @@ logm['db']['summary'] = msg_sum
 logm['db']['extended'] = msg_ext
 
 resp["log"]['magnitude'] = logm
+resp["log"]['stationmagnitudes'] = log['stationmagnitudes']
 
 if not mlhb:
    if log_out:
