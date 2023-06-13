@@ -39,7 +39,7 @@
 #         the rest is downweighted as hm_cutoff/(distance_from_the_mean)
 #    In both cases stations with hypocentral distance lower than mindist (tipically 10km) and higher than maxdist (tipically 600) are excluded
 
-import argparse,sys,os,glob,copy,pwd,pathlib,itertools
+import argparse,sys,os,glob,copy,pwd,pathlib,itertools,getpass,socket
 import geographiclib
 import pandas
 import time
@@ -58,6 +58,8 @@ from numpy import median as np_median
 from numpy import ones as np_ones
 from numpy import array as np_array
 from numpy import asarray as np_asarray
+
+from datetime import datetime
 
 from math import sqrt as msqrt, log10 as mlog10, pow as mpow
 
@@ -516,6 +518,19 @@ class DataEncoder(json.JSONEncoder):
 
 def json_response_structure():
     null=''
+    generic = {
+               "type": null,
+               "title": null,
+               "status": null,
+               "detail": null,
+               "instance": null,
+               "version": null,
+               "request_submitted": null,
+               "errors": {
+                          "inputfile": [],
+                          "arguments": []
+                         }
+              }
     response = {
                 "random_string": null,
                 "magnitudes": {},
@@ -590,7 +605,7 @@ def json_response_structure():
                              "w": null
                          }
                         }
-    return response,log,log_magnitude,log_stationmagnitude,log_stationmagnitude_channel,magnitudes,stationmagnitude,emag
+    return response,generic,log,log_magnitude,log_stationmagnitude,log_stationmagnitude_channel,magnitudes,stationmagnitude,emag
 
 def json_pyml_response(r):
     x=json.dumps(r,cls=DataEncoder)
@@ -599,26 +614,54 @@ def json_pyml_response(r):
 ###############################################################
 ###### End of Functions ##########
 ###### Main starts here ##########
-main_start_time = time.perf_counter()
+pyml_version="1.0.0"
 args = parseArguments()
+
+exit_condition=False
+jresponse,jbadrequest,jlog,jlog_mag,jlog_stamag,jlog_stamag_cha,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
+gresp = copy.deepcopy(jbadrequest)
 
 if args.out_format.lower() == 'txt':
    magnitudes_out=sys.stdout
    log_out=sys.stderr
-else:
+elif args.out_format.lower() == 'json':
    magnitudes_out=False
    log_out=False
+else:
+#   if log_out:
+#      sys.stderr.write("The given out format "+args.out_format.lower()+"/"+args.out_format+" is unknown\n")
+#   else:
+   log_out=False
+   gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
+   gresp['title'] = "Unprocessable entity"
+   gresp['status'] = "422"
+   gresp['detail'] = "The given data was invalid"
+   gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
+   gresp['version'] = str(pyml_version)
+   gresp['request_submitted'] = str(datetime.now())
+   gresp['errors']["arguments"].append("The given argument out format "+args.out_format.lower()+"/"+args.out_format+" is unknown")
+   exit_condition=True
 
 ############## PYML works either in CSV in/out or JSON in/out) #############################################################
-### IF no JSON argument is given, pyml works reading and writing csv files, with configuration loaded from a dictionary file
+### IF input format is csv pyml works reading csv files, with configuration loaded from a dictionary file
 if args.in_file_format.lower() == 'csv':
    infile=args.in_file_name
    conf_file = args.conf
    eventid=args.eventid
    dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file,log_out,infile)
    if dfa.empty:
-      sys.stderr.write("The given input pyamp file "+infile+" was incomplete\n")
-      sys.exit()
+      if log_out:
+         sys.stderr.write("The given input pyamp file "+infile+" was incomplete\n")
+      else:
+         gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
+         gresp['title'] = "Unprocessable entity"
+         gresp['status'] = "422"
+         gresp['detail'] = "The given data was invalid"
+         gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
+         gresp['version'] = str(pyml_version)
+         gresp['request_submitted'] = str(datetime.now())
+         gresp['errors']["inputfile"].append("The given input file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
+         exit_condition=True
 else:
    ### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
    if os.path.exists(args.in_file_name):
@@ -627,13 +670,34 @@ else:
       eventid=0
       if dfa.empty or not config or not origin:
          if log_out:
-            sys.stderr.write("The given input json file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete\n")
-         sys.exit()
+            sys.stderr.write("The given input file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
+         else:
+            gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
+            gresp['title'] = "Unprocessable entity"
+            gresp['status'] = "422"
+            gresp['detail'] = "The given data was invalid"
+            gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
+            gresp['version'] = str(pyml_version)
+            gresp['request_submitted'] = str(datetime.now())
+            gresp['errors']["inputfile"].append("The given input json file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
+            exit_condition=True
    else:
       if log_out:
-         sys.stderr.write("No input file "+args.in_file_name+" format "+args.in_file_format.lower()+" found: exit\n")
-      sys.exit()
+         sys.stderr.write("No input file "+args.in_file_name+" format "+args.in_file_format.lower()+" found: exit")
+      else:
+         gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
+         gresp['title'] = "Unprocessable entity"
+         gresp['status'] = "422"
+         gresp['detail'] = "The given data was invalid"
+         gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
+         gresp['version'] = str(pyml_version)
+         gresp['request_submitted'] = str(datetime.now())
+         gresp['errors']["inputfile"].append("No input file "+args.in_file_name+" format "+args.in_file_format.lower()+" found.")
+         exit_condition=True
 
+   if exit_condition:
+      sys.stdout.write(json_pyml_response(gresp))
+      sys.exit()
    # Preconditions
    theoP=config['preconditions']['theoretical_p']
    theoS=config['preconditions']['theoretical_s']
@@ -791,7 +855,6 @@ for index, row in dfa.iterrows():
 #execution_time = end_time - start_time
 
 # JSON STRUCTURE DEEPCOPY
-jresponse,jlog,jlog_mag,jlog_stamag,jlog_stamag_cha,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
 resp = copy.deepcopy(jresponse)
 log = copy.deepcopy(jlog)
 logm = copy.deepcopy(jlog_mag)
