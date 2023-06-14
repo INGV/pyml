@@ -963,9 +963,10 @@ else:
       mldb = False
       if log_out:
            log_out.write("Di Bona: Both Weighted Huber Mean and Outliers Removal failed\n")
-      msg_sts='supercritical'
+      msg_sts='critical'
       msg_sum="Di Bona: Both Weighted Huber Mean and Outliers Removal failed"
       msg_ext=""
+
 logm['db']['status'] = msg_sts
 logm['db']['summary'] = msg_sum
 logm['db']['extended'] = msg_ext
@@ -973,19 +974,20 @@ logm['db']['extended'] = msg_ext
 resp["log"]['magnitude'] = logm
 resp["log"]['stationmagnitudes'] = log['stationmagnitudes']
 
-if not mlhb:
-   if log_out:
-      log_out.write("Hutton&Boore ML was impossible to calculate\n")
-   sys.stdout.write(json_pyml_response(resp))
-if not mldb:
-   if log_out:
-      log_out.write("Di Bona ML was impossible to calculate\n")
-   sys.stdout.write(json_pyml_response(resp))
 if not mlhb and not mldb:
    if log_out:
-      log_out.write("Neither Hutton&Boore nor Di Bona ML was impossible to calculate\n")
+      log_out.write("Neither Hutton&Boore nor Di Bona ML could be calculate\n")
    sys.stdout.write(json_pyml_response(resp))
    sys.exit()
+#else:
+#   if not mlhb:
+#      if log_out:
+#         log_out.write("Hutton&Boore ML was impossible to calculate\n")
+#      sys.stdout.write(json_pyml_response(resp))
+#   elif not mldb:
+#      if log_out:
+#         log_out.write("Di Bona ML was impossible to calculate\n")
+#      sys.stdout.write(json_pyml_response(resp))
 #mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
 
 ######################################################
