@@ -144,12 +144,13 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
     ml_set=[]
     mtytxt='HuttonBoore' if mty==0 else 'DiBona'
     midi = 99999.0 # Minimum distance is needed and here below calculated to be used in the mag quality definition
+    log_condition=False
     for k in keys:
         n,s,l,c = k.split('_')
         kk=k+'_'+mtd
         logsm = copy.deepcopy(jlog_stamag)
         logsmc = copy.deepcopy(jlog_stamag_cha)
-        logsm['net'],logsm['sta'],logsm['loc'] = [n,s,l]
+        logsm['net'],logsm['sta'],logsm['loc'],logsm['band_inst'] = [n,s,l,c]
         logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            if not cmpn[kk][2] or not cmpe[kk][2]:
@@ -157,8 +158,9 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
               ipodist = False
               if log_out:
                  log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
+              logsm['status'] = "critical"
               logsm['summary'] = "Station skipped due to stations coordinates missing"
-              logsm["extended"]: mtytxt
+              logsm['extended'] = mtytxt
               logsms.append(logsm)
               continue
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
@@ -191,6 +193,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
                  logsm['status'] = 'warning'
                  logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station skipped due to time distance between min and max amp larger than",str(dp)))
                  logsm['extended'] = ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))
+                 log_condition=True
                  #logsms.append(logsm)
            else:
               if log_out:
@@ -198,6 +201,7 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
               logsm['status'] = 'warning' 
               logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist"))
               logsm['extended'] = ' '.join(("Distance is",str(ipodist),"km"))
+              log_condition=True
               #logsms.append(logsm)
         elif kk not in cmpn or kk not in cmpe:
            if log_out:
@@ -210,18 +214,20 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
               logsmc['status'] = 'critical' 
               logsmc['extended'] = 'missing' 
            else:
-              logsmc['cha'] = c+'N'
+              logsmc['orientation'] = 'N'
               logsmc['status'] = 'ok' 
            logsm['channels'].append(logsmc)
            if kk not in cmpe:
-              logsmc['cha'] = c+'E'
+              logsmc['orientation'] = 'E'
               logsmc['status'] = 'critical' 
               logsmc['extended'] = 'missing' 
            else:
-              logsmc['cha'] = c+'N'
+              logsmc['cha'] = c+'E'
               logsmc['status'] = 'ok' 
            logsm['channels'].append(logsmc)
-        logsms.append(logsm)
+           log_condition=True
+        if log_condition:
+           logsms.append(logsm)
     return ml_set,midi,logsms
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -337,7 +343,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
     vlen_stop = round(np_sum(weights),2)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights,whuber_fail
 
-def char_quality(nu,nw,d,m):
+def char_quality(nu,nw,d,m,r):
     #nu =  number of used stations
     #nw =  weighted number of used stations
     # d = minimum distance km
@@ -351,14 +357,19 @@ def char_quality(nu,nw,d,m):
        q1 = 'C'
     else:
        q1 = 'D'
-    # defining position 2
-    if d <= 50. and nw > (m*10.0+1):
+    # defining position 2 (by Alberto Basili for INGV Locator code) 
+    #A = rms<=0.2
+    #B = 0.2<rms<=0.3
+    #C = 0.3<rms<=0.4
+    #D = 0.4<rms
+    
+    if r <= 0.2:
        q2 = 'A'
-    elif d > 50. and d <= 100.0 and nw > (m*7.5+1):
+    elif r > 0.2 and r <= 0.3:
        q2 = 'B'
-    elif d > 100. and d <= 150.0 and nw > (m*5.0+1):
+    elif r > 0.3 and r <= 0.4:
        q2 = 'C'
-    else:
+    elif r > 0.4:
        q2 = 'D'
     return ''.join((q1,q2))
 
@@ -558,13 +569,14 @@ def json_response_structure():
                             "net": null,      # eg: "IV"
                             "sta": null,      # eg: "FDMO",
                             "loc": null,      # eg: "--",
+                            "band_inst": null,      # eg: "HH",
                             "status": null,   # eg: "warning",
                             "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
                             "extended": null, # eg: "Distance is 6.045133888690926 km"
                             "channels": []
                            }
     log_stationmagnitude_channel = {
-                                     "cha": null,      # "HHZ",
+                                     "orientation": null,      # "N",
                                      "status": null,   # "ok",
                                      "summary": null,  # "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
                                      "extended": null, # "Distance is 6.045133888690926 km"
@@ -662,7 +674,7 @@ if args.in_file_format.lower() == 'csv':
          gresp['request_submitted'] = str(datetime.now())
          gresp['errors']["inputfile"].append("The given input file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
          exit_condition=True
-else:
+elif args.in_file_format.lower() == 'json':
    ### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
    if os.path.exists(args.in_file_name):
       json_in=pandas.read_json(args.in_file_name)
@@ -679,7 +691,7 @@ else:
             gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
             gresp['version'] = str(pyml_version)
             gresp['request_submitted'] = str(datetime.now())
-            gresp['errors']["inputfile"].append("The given input json file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
+            gresp['errors']["inputfile"].append("The given input file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
             exit_condition=True
    else:
       if log_out:
@@ -719,6 +731,20 @@ else:
    outliers_red_stop=config['event_magnitude']['outliers_red_stop']
    outliers_nstd=config['event_magnitude']['outliers_nstd']
    outliers_cutoff=config['event_magnitude']['outliers_cutoff']
+else:
+   if log_out:
+      sys.stderr.write("The given input format "+args.in_file_format.lower()+" is unknown")
+   else:
+      gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
+      gresp['title'] = "Unprocessable entity"
+      gresp['status'] = "422"
+      gresp['detail'] = "The given data was invalid"
+      gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
+      gresp['version'] = str(pyml_version)
+      gresp['request_submitted'] = str(datetime.now())
+      gresp['errors']["arguments"].append("The given input format "+args.in_file_format.lower()+" is unknown")
+      sys.stdout.write(json_pyml_response(gresp))
+   sys.exit()
 
 if args.clipped_info:
    clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
@@ -775,9 +801,14 @@ for index, row in dfa.iterrows():
     cmp_keys.add(components_key)
 # Channel Magnitudes calculations and in case of event_magnitude argument on ... station magnitude calculation
 #net   sta  cha loc        lat      lon  elev   amp1                     time1   amp2                     time2
-    stla=False if pandas.isna(row['lat']) else float(row['lat'])
-    stlo=False if pandas.isna(row['lon']) else float(row['lon'])
-    stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
+    try:
+       stla=False if pandas.isna(row['lat']) else float(row['lat'])
+       stlo=False if pandas.isna(row['lon']) else float(row['lon'])
+       stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
+    except:
+       stla=False
+       stlo=False
+       stel=False
     try:
         hypo_dist = row['ipodistance(km)']
         epi_dist = row['epidistance(km)']
@@ -981,7 +1012,7 @@ if ma_mlh:
    jhb['std'] = ma_stdh
    jhb['totsta'] = ma_ns_s_h
    jhb['usedsta'] = ma_nsh
-   jhb['quality'] = char_quality(ma_ns_s_h,ma_nsh,mindist,ma_mlh)
+   jhb['quality'] = char_quality(ma_ns_s_h,ma_nsh,mindist,ma_mlh,ma_stdh)
 else:
    jhb = copy.deepcopy(empty_jemag)
 jmags["hb"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
@@ -991,7 +1022,7 @@ if ma_mld:
    jhb['std'] = ma_stdd
    jhb['totsta'] = ma_ns_s_d
    jhb['usedsta'] = ma_nsd
-   jhb['quality'] = char_quality(ma_ns_s_d,ma_nsd,mindist,ma_mld)
+   jhb['quality'] = char_quality(ma_ns_s_d,ma_nsd,mindist,ma_mld,ma_stdd)
 else:
    jhb = copy.deepcopy(empty_jemag)
 jmags["db"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
