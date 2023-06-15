@@ -130,7 +130,7 @@ def dibona(a,d,s,uc):
     return m
 
 
-def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_stamag,jlog_stamag_cha):
+def create_sets(keys,cmpn_original,cmpe_original,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_stamag,jlog_stamag_cha):
     # mtd is the peakmethod
     # mty is the huttonboore 0, dibona 1
     # a channel cmpn is [ml,amp,tr.dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
@@ -144,14 +144,24 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
     ml_set=[]
     mtytxt='HuttonBoore' if mty==0 else 'DiBona'
     midi = 99999.0 # Minimum distance is needed and here below calculated to be used in the mag quality definition
-    log_condition=False
+    cmpe = cmpe_original.copy()
+    cmpn = cmpn_original.copy()
     for k in keys:
+        log_condition=False
         n,s,l,c = k.split('_')
         kk=k+'_'+mtd
         logsm = copy.deepcopy(jlog_stamag)
-        logsmc = copy.deepcopy(jlog_stamag_cha)
         logsm['net'],logsm['sta'],logsm['loc'],logsm['band_inst'] = [n,s,l,c]
-        logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
+        #logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
+        why_missing_channel=""
+        if kk in cmpe:
+           if not cmpe[kk][1][1] or not cmpe[kk][1][0]:
+              why_missing_channel="maxamp missing" if not cmpe[kk][1][1] else "minamp missing"
+              remove_key = cmpe.pop(kk, None)
+        if kk in cmpn:
+           if not cmpn[kk][1][1] or not cmpn[kk][1][0]:
+              why_missing_channel="maxamp missing" if not cmpn[kk][1][1] else "minamp missing"
+              remove_key = cmpn.pop(kk, None)
         if kk in cmpn and kk in cmpe: # if both components are present in the set
            if not cmpn[kk][2] or not cmpe[kk][2]:
               epidist = False
@@ -205,24 +215,28 @@ def create_sets(keys,cmpn,cmpe,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_
               #logsms.append(logsm)
         elif kk not in cmpn or kk not in cmpe:
            if log_out:
-              log_out.write(' '.join(("Station skipped due to missing channel N",str(kk),'\n')))
+              log_out.write(' '.join(("Station skipped due to missing channel",str(kk),'\n')))
            logsm['status'] = 'critical'
            logsm['summary'] = 'Station skipped due to missing channel'
            logsm['extended'] = 'ML ' + mtytxt
+           logsmc = copy.deepcopy(jlog_stamag_cha)
            if kk not in cmpn:
-              logsmc['cha'] = c+'N'
+              logsmc['orientation'] = 'N'
               logsmc['status'] = 'critical' 
-              logsmc['extended'] = 'missing' 
+              logsmc['summary'] = 'missing' 
+              logsmc['extended'] = why_missing_channel
            else:
               logsmc['orientation'] = 'N'
               logsmc['status'] = 'ok' 
            logsm['channels'].append(logsmc)
+           logsmc = copy.deepcopy(jlog_stamag_cha)
            if kk not in cmpe:
               logsmc['orientation'] = 'E'
               logsmc['status'] = 'critical' 
-              logsmc['extended'] = 'missing' 
+              logsmc['summary'] = 'missing' 
+              logsmc['extended'] = why_missing_channel
            else:
-              logsmc['cha'] = c+'E'
+              logsmc['orientation'] = 'E'
               logsmc['status'] = 'ok' 
            logsm['channels'].append(logsmc)
            log_condition=True
@@ -631,7 +645,12 @@ args = parseArguments()
 
 exit_condition=False
 jresponse,jbadrequest,jlog,jlog_mag,jlog_stamag,jlog_stamag_cha,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
+# JSON STRUCTURE DEEPCOPY
+resp  = copy.deepcopy(jresponse)
+log   = copy.deepcopy(jlog)
+logm  = copy.deepcopy(jlog_mag)
 gresp = copy.deepcopy(jbadrequest)
+resp['random_string'] = 'github/ingv/pyml'
 
 if args.out_format.lower() == 'txt':
    magnitudes_out=sys.stdout
@@ -765,15 +784,98 @@ else:
    dbcorr=False
 
 
-km=1000.
-# Standard header
-#Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
 start_time = time.perf_counter()
+km=1000.
+unit=1000 # pyamp units
+if args.in_file_format == 'json':
+   unit=1 #db units
+
 for index, row in dfa.iterrows():
-    net = row['net']
-    sta = row['sta']
-    loc = row['loc']
-    cha = row['cha']
+    #### Testing the basic data ####
+    # Channel Info
+    try:
+       net = row['net']
+       net = False if pandas.isna(row['net']) else net
+    except:
+       net = False
+    try:
+       sta = row['sta']
+       sta = False if pandas.isna(row['sta']) else sta
+    except:
+       sta = False
+    try:
+       loc = row['loc']
+       loc = "--" if not loc else loc
+    except:
+       loc = False
+    try:
+       cha = row['cha']
+       cha = False if pandas.isna(row['cha']) else cha
+    except:
+       cha = False
+    # Amplitudes
+    try:
+       minamp=row['minamp(m)']*unit
+    except:
+       try:
+          minamp=row['amp1']*unit
+          minamp = False if pandas.isna(row['amp1']) else minamp
+       except:
+          minamp = False
+    try:
+       maxamp=row['maxamp(m)']*unit
+    except:
+       try:
+          maxamp=row['amp2']*unit
+          maxamp = False if pandas.isna(row['amp2']) else maxamp
+       except:
+          maxamp = False
+
+    # Amplitudes times 
+    try:
+       time_minamp=row['minamptime']
+    except:
+       try:
+          time_minamp=row['time1']
+          time_minamp = False if pandas.isna(row['time1']) else time_minamp
+       except:
+          time_minamp = False
+    try:
+       time_maxamp=row['maxamptime']
+    except:
+       try:
+          time_maxamp=row['time2']
+          time_maxamp = False if pandas.isna(row['time2']) else time_maxamp
+       except:
+          time_maxamp = False
+    # Station's coordinates
+    try:
+       stla=False if pandas.isna(row['lat']) else float(row['lat'])
+       stlo=False if pandas.isna(row['lon']) else float(row['lon'])
+       stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
+    except:
+       stla=False
+       stlo=False
+       stel=False
+
+    check_list = {
+                  'net': net,
+                  'sta': sta,
+                  'loc': loc,
+                  'cha': cha,
+                  'minamp': minamp,
+                  'maxamp': maxamp,
+                  'time_minamp': time_minamp,
+                  'time_maxamp': time_maxamp,
+                  'stla': stla,
+                  'stlo': stlo
+                 }
+    false_keys = [key for key, value in check_list.items() if not value]
+    if 'net' in false_keys or 'sta' in false_keys or 'loc' in false_keys or 'cha' in false_keys:
+       continue
+    #if 'minamp' in false_keys or 'maxamp' in false_keys:
+    #   print(sta)
+
     try:
         corner_low=float(row['loco'])
     except:
@@ -782,6 +884,11 @@ for index, row in dfa.iterrows():
         corner_high=float(row['hico'])
     except:
         corner_high=False
+    try:
+        met=row['method']
+
+    except:
+        met='ingv'
     if args.clipped_info:
        clp=clip.loc[(clip['net'] == net) & (clip['sta'] == sta) & (clip['cha'] == cha)]
        if not clp.empty:
@@ -799,16 +906,7 @@ for index, row in dfa.iterrows():
     #tr.dist=distmeters/1000.
     components_key='_'.join((str(net),str(sta),str(loc),str(cha[0:2])))
     cmp_keys.add(components_key)
-# Channel Magnitudes calculations and in case of event_magnitude argument on ... station magnitude calculation
-#net   sta  cha loc        lat      lon  elev   amp1                     time1   amp2                     time2
-    try:
-       stla=False if pandas.isna(row['lat']) else float(row['lat'])
-       stlo=False if pandas.isna(row['lon']) else float(row['lon'])
-       stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
-    except:
-       stla=False
-       stlo=False
-       stel=False
+
     try:
         hypo_dist = row['ipodistance(km)']
         epi_dist = row['epidistance(km)']
@@ -828,27 +926,7 @@ for index, row in dfa.iterrows():
            log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist),str(hypo_dist),"\n")))
         
     ml = [False]*2
-    #minamp,maxamp,time_minamp,time_maxamp,amp,met = amp_method[2:]
-    unit=1000 # pyamp units
-    if args.in_file_format == 'json':
-       unit=1 #db units
-    try:
-        minamp=row['minamp(m)']*unit
-        time_minamp=row['minamptime']
-    except:
-        minamp=row['amp1']*unit
-        time_minamp=row['time1']
-    try:
-        maxamp=row['maxamp(m)']*unit
-        time_maxamp=row['maxamptime']
-    except:
-        maxamp=row['amp2']*unit
-        time_maxamp=row['time2']
     amp = abs(maxamp-minamp)/2
-    try:
-        met=row['method']
-    except:
-        met='ingv'
     components_key_met=components_key+'_'+met
     # Loading stations corrections
     dbsite=sta
@@ -881,21 +959,11 @@ for index, row in dfa.iterrows():
     elif cha[2] == 'Z':
        components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     else:
-       log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
-#end_time = time.perf_counter()
-#execution_time = end_time - start_time
-
-# JSON STRUCTURE DEEPCOPY
-resp = copy.deepcopy(jresponse)
-log = copy.deepcopy(jlog)
-logm = copy.deepcopy(jlog_mag)
-resp['random_string'] = 'github/ingv/pyml'
+       if log_out:
+          log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
 
 # Hutton and Boore
-#start_time = time.perf_counter()
 mean_hb_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
-#end_time = time.perf_counter()
-#execution_time = end_time - start_time
 #if log_out:
 #   log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
 if len(mean_hb_ml_sta) == 0:
@@ -1033,17 +1101,12 @@ jmags["magmethod"] = mag_mean_type
 jmags["loopexitcondition"] = cond_hb+'-'+cond_db
 resp["magnitudes"].update(jmags)
 
-#json.dump(jmags,sys.stdout)
-
-#magnitudes_out.write(';'.join((str(eventid),str(mm_mlh),str(mm_stdh),str(mm_ns_s_h),str(mm_nsh),str(mm_mld),str(mm_stdd),str(mm_ns_s_d),str(mm_nsd),met,'meanmag',cond,'\n')))
 channels_dictionary = {}
 for x, y, wx, wy in zip(mean_hb_ml_sta, mean_db_ml_sta, weights_hb, weights_db):
     sth,mh = map(str,x)
     std,md = map(str,y)
     whb = str(wx)
     wdb = str(wy)
-    #magnitudes_out.write(' '.join(('MLSTA',sth,mh,whb,std,md,wdb,'\n')))
-    #MLSTA IV_MIDA_None_HN_ingv 3.1782901276644764 1.0 IV_MIDA_None_HN_ingv 3.158132200624496 1.0
     if components_N[sth] and components_E[sth]:
        nwr,swr,lwr,chwr,mwr = sth.split('_')
        ch_N_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "N"
