@@ -1,0 +1,124 @@
+{
+  "data": {
+    "output": "json",
+    "pyml_conf": {
+      "preconditions": {
+        "theoretical_p": true,
+        "theoretical_s": true,
+        "delta_corner": 5,
+        "max_lowcorner": 15
+      },
+      "station_magnitude": {
+        "station_magnitude": "meanamp",
+        "amp_mean_type": "geo",
+        "delta_peaks": 1,
+        "use_stcorr_hb": true,
+        "use_stcorr_db": true,
+        "when_no_stcorr_hb": true,
+        "when_no_stcorr_db": true,
+        "mag_mean_type": "meanamp"
+      },
+      "event_magnitude": {
+        "mindist": 10,
+        "maxdist": 600,
+        "hm_cutoff": [
+          0.3,
+          1
+        ],
+        "outliers_max_it": 10,
+        "outliers_red_stop": 0.05,
+        "outliers_nstd": 1,
+        "outliers_cutoff": 0.1
+      },
+      "iofilenames": {
+        "magnitudes": "/app/storage/app/data/pyml/20230607_132735__mail3sms.int.ingv.it__6Hyak/pyml_magnitudes.csv",
+        "log": "/app/storage/app/data/pyml/20230607_132735__mail3sms.int.ingv.it__6Hyak/pyml_general.log"
+      }
+    },
+    "origin": {
+      "lat": 43.004501,
+      "lon": 13.055,
+      "depth": 3.57
+    },
+    "amplitudes": [
+      {
+        "sta": "FDMO",
+        "net": "IV",
+        "cha": "HHN",
+        "loc": "--",
+        "amp1": -0.178,
+        "time1": "2023-04-05T03:48:18.1Z",
+        "amp2": 0.271,
+        "time2": "2023-04-05T03:48:17.9Z",
+        "lat": 43.0365,
+        "lon": 13.0873,
+        "elev": 550
+      },
+      {
+        "sta": "FDMO",
+        "net": "IV",
+        "cha": "HHE",
+        "loc": "--",
+        "amp1": -0.161,
+        "time1": "2023-04-05T03:48:18.21Z",
+        "amp2": 0.10300000000000001,
+        "time2": "2023-04-05T03:48:18.16Z",
+        "lat": 43.0365,
+        "lon": 13.0873,
+        "elev": 550
+      },
+      {
+        "sta": "MML1",
+        "net": "IV",
+        "cha": "EHN",
+        "loc": "--",
+        "amp1": -0.264,
+        "time1": "2023-04-05T03:48:19.54Z",
+        "amp2": 0.295,
+        "time2": "2023-04-05T03:48:19.59Z",
+        "lat": 43.1135,
+        "lon": 12.9717,
+        "elev": 943
+      },
+      {
+        "sta": "MML1",
+        "net": "IV",
+        "cha": "EHE",
+        "loc": "--",
+        "amp1": -0.253,
+        "time1": "2023-04-05T03:48:19.49Z",
+        "amp2": 0.247,
+        "time2": "2023-04-05T03:48:19.64Z",
+        "lat": 43.1135,
+        "lon": 12.9717,
+        "elev": 943
+      },
+      {
+        "sta": "NRCA",
+        "net": "IV",
+        "cha": "HHN",
+        "loc": "--",
+        "amp1": -0.154,
+        "time1": "2023-04-05T03:48:22.67Z",
+        "amp2": 0.07880000000000001,
+        "time2": "2023-04-05T03:48:22.96Z",
+        "lat": 42.83355,
+        "lon": 13.11427,
+        "elev": 927
+      },
+      {
+        "sta": "NRCA",
+        "net": "IV",
+        "cha": "HHE",
+        "loc": "--",
+        "amp1": -0.0801,
+        "time1": "2023-04-05T03:48:23.17Z",
+        "amp2": 0.10200000000000001,
+        "time2": "2023-04-05T03:48:22.81Z",
+        "lat": 42.83355,
+        "lon": 13.11427,
+        "elev": 927
+      }
+    ]
+  }
+}

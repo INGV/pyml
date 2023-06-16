@@ -1,0 +1,98 @@
+{
+  "data": {
+    "output": "json",
+    "pyml_conf": {
+      "preconditions": {
+        "theoretical_p": true,
+        "theoretical_s": true,
+        "delta_corner": 5,
+        "max_lowcorner": 15
+      },
+      "station_magnitude": {
+        "station_magnitude": "meanmag",
+        "amp_mean_type": "geo",
+        "delta_peaks": 1,
+        "use_stcorr_hb": true,
+        "use_stcorr_db": true,
+        "when_no_stcorr_hb": true,
+        "when_no_stcorr_db": true,
+        "mag_mean_type": "meanamp"
+      },
+      "event_magnitude": {
+        "mindist": 10,
+        "maxdist": 600,
+        "hm_cutoff": [
+          0.3,
+          1
+        ],
+        "outliers_max_it": 10,
+        "outliers_red_stop": 0.05,
+        "outliers_nstd": 1,
+        "outliers_cutoff": 0.1
+      },
+      "iofilenames": {
+        "magnitudes": "./pyml_magnitudes.csv",
+        "log": "./pyml_general.log"
+      }
+    },
+    "origin": {
+      "lat": 43.490665,
+      "lon": 12.288667,
+      "depth": 6.49
+    },
+    "amplitudes": [
+      {
+        "sta": "TERO",
+        "net": "IV",
+        "cha": "HHE",
+        "loc": "--",
+        "amp1": -0.0197,
+        "time1": "2023-03-13T07:27:26.92Z",
+        "amp2": 0.0288,
+        "time2": "2023-03-13T07:27:26.96Z",
+        "lat": 42.62279,
+        "lon": 13.60393,
+        "elev": 673
+      },
+      {
+        "sta": "TERO",
+        "net": "IV",
+        "cha": "HHN",
+        "loc": "--",
+        "amp1": -0.0323,
+        "time1": "2023-03-13T07:27:26.85Z",
+        "amp2": 0.0546,
+        "time2": "2023-03-13T07:27:26.92Z",
+        "lat": 42.62279,
+        "lon": 13.60393,
+        "elev": 673
+      },
+      {
+        "sta": "OT17",
+        "net": "OT",
+        "cha": "EHE",
+        "loc": "--",
+        "amp1": -1.26,
+        "time1": "2023-03-13T07:27:49.09Z",
+        "amp2": 1.57,
+        "time2": "2023-03-13T07:27:48.77Z",
+        "lat": 41.6876,
+        "lon": 15.3698,
+        "elev": 91
+      },
+      {
+        "sta": "OT17",
+        "net": "OT",
+        "cha": "EHN",
+        "loc": "--",
+        "amp1": -1.48,
+        "time1": "2023-03-13T07:28:35.35Z",
+        "amp2": 1.5,
+        "time2": "2023-03-13T07:28:35.19Z",
+        "lat": 41.6876,
+        "lon": 15.3698,
+        "elev": 91
+      }
+    ]
+  }
+}
