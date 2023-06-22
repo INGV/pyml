@@ -30,27 +30,12 @@
                 "outliers_cutoff": 0.1
             }
         },
-        "iofilenames": {
-          "magnitudes": "./output/pyml_magnitudes.csv",
-          "log": "./output/pyml_general.log"
-        },
         "origin": {
             "lat": 41.56380081176758,
             "lon": 13.792200088500977,
             "depth": 8.4
         },
         "amplitudes": [
-            {
-                "net": "IV",
-                "sta": "MCI",
-                "cha": "EHE",
-                "loc": "--",
-                "amp2": 154.701,
-                "time2": "2021-10-28T10:43:45.286+00:00",
-                "lat": 41.491036,
-                "lon": 13.813008,
-                "elev": 493
-            },
             {
                 "net": "IV",
                 "sta": "MCI",
@@ -104,6 +89,7 @@
                 "elev": 878
             },
             {
+                "net": "IV",
                 "sta": "LRP",
                 "cha": "EHN",
                 "loc": "--",
@@ -114,19 +100,6 @@
                 "lat": 41.64709,
                 "lon": 13.58658,
                 "elev": 372
-            },
-            {
-                "net": "IV",
-                "sta": "VVLD",
-                "cha": "HNN",
-                "loc": "--",
-                "amp1": -5.03318,
-                "time1": "2021-10-28T10:43:54.393+00:00",
-                "amp2": 2.65906,
-                "time2": "2021-10-28T10:43:54.553+00:00",
-                "lat": 41.86965,
-                "lon": 13.62324,
-                "elev": 1051
             },
             {
                 "net": "IV",
