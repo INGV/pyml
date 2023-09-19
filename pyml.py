@@ -1168,6 +1168,9 @@ for key in components_N:
             jstmag["time1"] = components_N[key][6]
             jstmag["amp2"] = components_N[key][1][1]
             jstmag["time2"] = components_N[key][7]
+            jstmag["ep_distance_km"] = components_N[key][2]
+            jstmag["ep_distance_delta"] = components_N[key][3]
+            jstmag["orig_distance"] = components_N[key][4]
             if components_N[key][8]:
                jstmag["lat"] = components_N[key][8]
             if components_N[key][9]:
@@ -1202,6 +1205,9 @@ for key in components_N:
             jstmag["time1"] = components_E[key][6]
             jstmag["amp2"] = components_E[key][1][1]
             jstmag["time2"] = components_E[key][7]
+            jstmag["ep_distance_km"] = components_E[key][2]
+            jstmag["ep_distance_delta"] = components_E[key][3]
+            jstmag["orig_distance"] = components_E[key][4]
             if components_E[key][8]:
                jstmag["lat"] = components_E[key][8]
             if components_E[key][9]:
