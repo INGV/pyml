@@ -40,7 +40,7 @@
 #    In both cases stations with hypocentral distance lower than mindist (tipically 10km) and higher than maxdist (tipically 600) are excluded
 
 import argparse,sys,os,glob,copy,pwd,pathlib,itertools,getpass,socket
-import geographiclib
+from geographiclib.geodesic import Geodesic
 import pandas
 import time
 import json
@@ -174,21 +174,21 @@ def create_sets(keys,cmpn_original,cmpe_original,mtd,mid,mad,dp,mty,whstc,stc,mm
               logsms.append(logsm)
               continue
            epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
-           ipodist = (cmpn[kk][3] + cmpe[kk][3])/2 # ipocentral distance
+           ipodist = (cmpn[kk][4] + cmpe[kk][4])/2 # ipocentral distance
            amp_e = abs(cmpe[kk][1][1]-cmpe[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
            amp_n = abs(cmpn[kk][1][1]-cmpn[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
            if ipodist >= mid and ipodist <= mad: # if ipocentral distance is within the accepted range we proceed
-              if mtd != 'free' or (mtd == 'free' and abs(cmpn[kk][6]-cmpn[kk][5]) <= dp and abs(cmpe[kk][6]-cmpe[kk][5]) <= dp): # if the method is not free the deltapeak has no meaning orherwise it is evaluated
+              if mtd != 'free' or (mtd == 'free' and abs(cmpn[kk][7]-cmpn[kk][6]) <= dp and abs(cmpe[kk][7]-cmpe[kk][6]) <= dp): # if the method is not free the deltapeak has no meaning orherwise it is evaluated
                  #Mean of channel magnitudes is calculated
                  if mmt == 'meanmag' and cmpn[kk][0][mty] and cmpe[kk][0][mty]:
                     mm = (cmpn[kk][0][mty] + cmpe[kk][0][mty])/2
-                 elif mmt == 'meanamp' and (not stc or (cmpn[kk][4][mty] and cmpe[kk][4][mty]) or whstc): 
+                 elif mmt == 'meanamp' and (not stc or (cmpn[kk][5][mty] and cmpe[kk][5][mty]) or whstc): 
                  # Magnitudes of Mean channel amplitudes is calculated if 
                     if amt == 'ari':
                        mean_amp = (amp_n + amp_e)/2 # Artimetic mean
                     elif amt == 'geo':
                        mean_amp = msqrt(amp_n * amp_e) # Geometric mean that is the correct one according to Di Bona
-                    corr = (cmpn[kk][4][mty] + cmpe[kk][4][mty])/2 if cmpn[kk][4][mty] and cmpe[kk][4][mty] else False
+                    corr = (cmpn[kk][5][mty] + cmpe[kk][5][mty])/2 if cmpn[kk][5][mty] and cmpe[kk][5][mty] else False
                     if mty == 0:
                        mm = huttonboore(mean_amp,ipodist,corr,stc)
                        mtytxt = 'HuttonBoore'
@@ -199,10 +199,10 @@ def create_sets(keys,cmpn_original,cmpe_original,mtd,mid,mad,dp,mty,whstc,stc,mm
                  midi = epidist if epidist < midi else midi
               else:
                  if log_out:
-                    log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][6]-cmpn[kk][5])),"\n")))
+                    log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][7]-cmpn[kk][6])),"\n")))
                  logsm['status'] = 'warning'
                  logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station skipped due to time distance between min and max amp larger than",str(dp)))
-                 logsm['extended'] = ' '.join(("Time distance is",str(abs(cmpn[kk][6]-cmpn[kk][5])),"s"))
+                 logsm['extended'] = ' '.join(("Time distance is",str(abs(cmpn[kk][7]-cmpn[kk][6])),"s"))
                  log_condition=True
                  #logsms.append(logsm)
            else:
@@ -622,6 +622,9 @@ def json_response_structure():
 #                        "lat": null,
 #                        "lon": null,
 #                        "elev": null,
+                         "ep_distance_km": null,
+                         "ep_distance_delta": null,
+                         "orig_distance": null,
                          "hb": {
                              "ml": null,
                              "w": null 
@@ -642,6 +645,9 @@ def json_pyml_response(r):
 ###### Main starts here ##########
 pyml_version="1.0.0"
 args = parseArguments()
+
+# setting up geographiclib
+geod = Geodesic.WGS84
 
 exit_condition=False
 jresponse,jbadrequest,jlog,jlog_mag,jlog_stamag,jlog_stamag_cha,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
@@ -909,21 +915,29 @@ for index, row in dfa.iterrows():
 
     try:
         hypo_dist = row['ipodistance(km)']
-        epi_dist = row['epidistance(km)']
+        epi_dist_km = row['epidistance(km)']
+        epi_dist_deg = False
     except:
         #calcolo le distanze
         evla=float(origin['lat'])
         evlo=float(origin['lon'])
         evdp=float(origin['depth'])
         if not stla or not stlo:
-           epi_dist = False
+           epi_dist_km = False
+           epi_dist_deg = False
            hypo_dist = False
         else:
+           geo_dict = geod.Inverse(evla,evlo,stla,stlo)
+           #distmeters = geo_dict['s12']
+           distdegrees = geo_dict['a12']
+           #azi = geo_dict['azi1']
+           #bazi = geo_dict['azi2']
            [distmeters,azi,bazi] = distaz(stla,stlo,evla,evlo)
-           epi_dist = distmeters / km
-           hypo_dist = msqrt(mpow(epi_dist,2)+mpow((evdp+stel),2))
+           epi_dist_km = distmeters / km
+           epi_dist_deg = distdegrees
+           hypo_dist = msqrt(mpow(epi_dist_km,2)+mpow((evdp+stel),2))
         if log_out:
-           log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist),str(hypo_dist),"\n")))
+           log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist_km),str(epi_dist_deg),str(hypo_dist),"\n")))
         
     ml = [False]*2
     amp = abs(maxamp-minamp)/2
@@ -953,11 +967,11 @@ for index, row in dfa.iterrows():
        ml[1] = False
 
     if cha[2] == 'N':
-       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
+       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     elif cha[2] == 'E':
-       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
+       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     elif cha[2] == 'Z':
-       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
+       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
     else:
        if log_out:
           log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
@@ -1151,15 +1165,15 @@ for key in components_N:
             jstmag["cha"] = c + 'N'
             jstmag["loc"] =  "--" if l == 'None' else l
             jstmag["amp1"] = components_N[key][1][0]
-            jstmag["time1"] = components_N[key][5]
+            jstmag["time1"] = components_N[key][6]
             jstmag["amp2"] = components_N[key][1][1]
-            jstmag["time2"] = components_N[key][6]
-            if components_N[key][7]:
-               jstmag["lat"] = components_N[key][7]
+            jstmag["time2"] = components_N[key][7]
             if components_N[key][8]:
-               jstmag["lon"] = components_N[key][8]
+               jstmag["lat"] = components_N[key][8]
             if components_N[key][9]:
-               jstmag["elev"] = components_N[key][9]
+               jstmag["lon"] = components_N[key][9]
+            if components_N[key][10]:
+               jstmag["elev"] = components_N[key][10]
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": float(channels_dictionary[key][0][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": float(channels_dictionary[key][0][3])}
@@ -1173,7 +1187,7 @@ for key in components_N:
             #logmch['status'] = 'ok'
             #logmch['level'] = 'channel'
             #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E', "extended": ''}
-            if components_N[key][7] and components_N[key][8] and components_N[key][9]:
+            if components_N[key][8] and components_N[key][9] and components_N[key][10]:
                resp["stationmagnitudes"].append(jstmag)
             #resp["log"].append(logmch)
     jstmag = copy.deepcopy(jstationmagnitude)
@@ -1185,15 +1199,15 @@ for key in components_N:
             jstmag["cha"] = c + 'E'
             jstmag["loc"] =  "--" if l == 'None' else l
             jstmag["amp1"] = components_E[key][1][0]
-            jstmag["time1"] = components_E[key][5]
+            jstmag["time1"] = components_E[key][6]
             jstmag["amp2"] = components_E[key][1][1]
-            jstmag["time2"] = components_E[key][6]
-            if components_E[key][7]:
-               jstmag["lat"] = components_E[key][7]
+            jstmag["time2"] = components_E[key][7]
             if components_E[key][8]:
-               jstmag["lon"] = components_E[key][8]
+               jstmag["lat"] = components_E[key][8]
             if components_E[key][9]:
-               jstmag["elev"] = components_E[key][9]
+               jstmag["lon"] = components_E[key][9]
+            if components_E[key][10]:
+               jstmag["elev"] = components_E[key][10]
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": float(channels_dictionary[key][1][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": float(channels_dictionary[key][1][3])}
@@ -1208,7 +1222,7 @@ for key in components_N:
             #logmch['status'] = 'ok'
             #logmch['level'] = 'channel'
             #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N', "extended": ''}
-            if components_E[key][7] and components_E[key][8] and components_E[key][9]:
+            if components_E[key][8] and components_E[key][9] and components_E[key][10]:
                resp["stationmagnitudes"].append(jstmag)
             #resp["log"].append(logmch)
             #resp["stationmagnitudes"].append(jstmag)
