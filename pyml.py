@@ -71,7 +71,7 @@ class MyParser(argparse.ArgumentParser):
 
 def parseArguments():
         parser=MyParser()	
-        parser.add_argument('--in_file_name',       default=None,          help='Name (and path) of inpout amplitudes file')
+        parser.add_argument('--in_file_name',       default=None,          help='Name (and path) of input amplitudes file')
         parser.add_argument('--in_file_format',     default='json',        help='options are json (data and config in one single file) or csv (pyamp format): this latter needs also the --conf argument')
         parser.add_argument('--conf',               default=None,          help='A file containing sections and related parameters (used only with --csv)')
         parser.add_argument('--out_format',         default='json',        help='options are json or txt')
@@ -558,6 +558,7 @@ def json_response_structure():
               }
     response = {
                 "random_string": null,
+                "hostname": {},
                 "magnitudes": {},
                 "stationmagnitudes": [],
                 "log": {}
@@ -657,6 +658,7 @@ log   = copy.deepcopy(jlog)
 logm  = copy.deepcopy(jlog_mag)
 gresp = copy.deepcopy(jbadrequest)
 resp['random_string'] = 'github/ingv/pyml'
+resp['hostname'] = socket.gethostname()
 
 if args.out_format.lower() == 'txt':
    magnitudes_out=sys.stdout
