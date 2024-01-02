@@ -12,7 +12,7 @@ Python code, complementary to pyamp, to calculate ML with different methods and 
 ### Docker image
 First, clone the git repository
 ```
-git clone git@gitlab.rm.ingv.it:raffaele.distefano/pyml.git
+git clone https://github.com/INGV/pyml.git
 cd pyml
 docker build --tag ingv/pyml .
 ```
