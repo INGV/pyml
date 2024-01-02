@@ -626,6 +626,7 @@ def json_response_structure():
                          "ep_distance_km": null,
                          "ep_distance_delta": null,
                          "orig_distance": null,
+                         "azimuth": null,
                          "hb": {
                              "ml": null,
                              "w": null 
@@ -928,6 +929,7 @@ for index, row in dfa.iterrows():
            epi_dist_km = False
            epi_dist_deg = False
            hypo_dist = False
+           epi_azimuth = False
         else:
            geo_dict = geod.Inverse(evla,evlo,stla,stlo)
            #distmeters = geo_dict['s12']
@@ -938,8 +940,9 @@ for index, row in dfa.iterrows():
            epi_dist_km = distmeters / km
            epi_dist_deg = distdegrees
            hypo_dist = msqrt(mpow(epi_dist_km,2)+mpow((evdp+stel),2))
+           epi_azimuth = azi
         if log_out:
-           log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist_km),str(epi_dist_deg),str(hypo_dist),"\n")))
+           log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist_km),str(epi_dist_deg),str(hypo_dist),str(epi_azimuth),"\n")))
         
     ml = [False]*2
     amp = abs(maxamp-minamp)/2
@@ -969,11 +972,11 @@ for index, row in dfa.iterrows():
        ml[1] = False
 
     if cha[2] == 'N':
-       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
+       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km,epi_azimuth]
     elif cha[2] == 'E':
-       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
+       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km,epi_azimuth]
     elif cha[2] == 'Z':
-       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km]
+       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,stla,stlo,stel*km,epi_azimuth]
     else:
        if log_out:
           log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
@@ -1179,6 +1182,8 @@ for key in components_N:
                jstmag["lon"] = components_N[key][9]
             if components_N[key][10]:
                jstmag["elev"] = components_N[key][10]
+            if components_N[key][11]:
+               jstmag["azimuth"] = components_N[key][11]
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": float(channels_dictionary[key][0][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": float(channels_dictionary[key][0][3])}
@@ -1216,6 +1221,8 @@ for key in components_N:
                jstmag["lon"] = components_E[key][9]
             if components_E[key][10]:
                jstmag["elev"] = components_E[key][10]
+            if components_E[key][11]:
+               jstmag["azimuth"] = components_E[key][11]
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": float(channels_dictionary[key][1][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": float(channels_dictionary[key][1][3])}
