@@ -1033,7 +1033,6 @@ else:
    #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    mean_ml = list(list(zip(*mean_db_ml_sta))[1])
    mean_ml_sta = np_asarray(list(list(zip(*mean_db_ml_sta))[0]), dtype=object)
-   sys.stderr.write("RUN DB"+'\n')
    ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    if ma_mld:
       mldb = True
@@ -1142,7 +1141,7 @@ if not hm_cutoff or wh_hb_fail or wh_db_fail:
       if len(outliers_hb) > 0:
          for x in outliers_hb[0]:
              sth,mh = map(str,list(x))
-                magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
+             magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
       if len(outliers_db) > 0:
          for y in outliers_db[0]:
              std,md = map(str,list(y))
