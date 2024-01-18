@@ -362,16 +362,20 @@ def char_quality(nu,nw,d,m,r):
     #nw =  weighted number of used stations
     # d = minimum distance km
     # m = magnitude
-    # defining position 1
-    if d <= 50. and nu > (m*10.0+1):
+    # defining position 1: this character is defined according to a rule described in a Sismo-CAT course at INGV 
+    # uploaded in Google Drive on 24 May 2019 by Anna Nardi (https://docs.google.com/presentation/d/16ZzCgUQhkS7eIcbVNX-IH8IAmbPbQ7K6Fq45jte3ON0/edit#slide=id.p12)
+    # there, only A B C are defined: outside of this definitions, all is D
+    # In the original formula, the nu is the number of components: since in pyml we do not use separate channels but station mean ML values, to keep the validity of
+    # the adopted parameters, we multiply nu by 2 channels
+    if d <= 50. and nu*2 > (m*10.0+1):
        q1 = 'A'
-    elif d > 50. and d <= 100.0 and nu > (m*7.5+1):
+    elif d <= 100.0 and nu*2 > (m*7.5+1):
        q1 = 'B'
-    elif d > 100. and d <= 150.0 and nu > (m*5.0+1):
+    elif d <= 150.0 and nu*2 > (m*5.0+1):
        q1 = 'C'
     else:
        q1 = 'D'
-    # defining position 2 (by Alberto Basili for INGV Locator code) 
+    # defining position 2 (by Alberto Basili for INGV Locator code, statement since 2010)
     #A = rms<=0.2
     #B = 0.2<rms<=0.3
     #C = 0.3<rms<=0.4
