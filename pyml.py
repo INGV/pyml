@@ -1033,6 +1033,7 @@ else:
    #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    mean_ml = list(list(zip(*mean_db_ml_sta))[1])
    mean_ml_sta = np_asarray(list(list(zip(*mean_db_ml_sta))[0]), dtype=object)
+   sys.stderr.write("RUN DB"+'\n')
    ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    if ma_mld:
       mldb = True
@@ -1136,14 +1137,16 @@ for x, y, wx, wy in zip(mean_hb_ml_sta, mean_db_ml_sta, weights_hb, weights_db):
           magnitudes_out.write(' '.join(("MLCHA",ch_E_rewrite,str(components_E[sth][0][0]),str(whb),ch_E_rewrite,str(components_E[sth][0][1]),str(wdb),'\n')))
        channels_dictionary[ch_rewrite] = [[components_N[sth][0][0],whb,components_N[sth][0][1],wdb],[components_E[sth][0][0],whb,components_E[sth][0][1],wdb]]
 if not hm_cutoff or wh_hb_fail or wh_db_fail:
-   for x in outliers_hb[0]:
-       sth,mh = map(str,list(x))
-       if magnitudes_out:
-          magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
-   for y in outliers_db[0]:
-       std,md = map(str,list(y))
-       if magnitudes_out:
-          magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
+   # This loop is needed for sth and mh also in json but only if magnitudes_out is true goes to the text out ... nevertheless, outliers list might be empty
+   if magnitudes_out:
+      if len(outliers_hb) > 0:
+         for x in outliers_hb[0]:
+             sth,mh = map(str,list(x))
+                magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
+      if len(outliers_db) > 0:
+         for y in outliers_db[0]:
+             std,md = map(str,list(y))
+             magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
 
 
 for key in components_N:
