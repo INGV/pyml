@@ -61,7 +61,7 @@ from numpy import asarray as np_asarray
 
 from datetime import datetime
 
-from math import sqrt as msqrt, log10 as mlog10, pow as mpow
+from math import sqrt as msqrt, log10 as mlog10, pow as mpow, log2 as mlog2
 
 class MyParser(argparse.ArgumentParser):
     def error(self, message):
@@ -367,20 +367,32 @@ def char_quality(nu,nw,d,m,r):
     # there, only A B C are defined: outside of this definitions, all is D
     # In the original formula, the nu is the number of components: since in pyml we do not use separate channels but station mean ML values, to keep the validity of
     # the adopted parameters, we multiply nu by 2 channels
-    if d <= 50. and nu*2 > (m*10.0+1):
-       q1 = 'A'
-    elif d <= 100.0 and nu*2 > (m*7.5+1):
-       q1 = 'B'
-    elif d <= 150.0 and nu*2 > (m*5.0+1):
-       q1 = 'C'
-    else:
-       q1 = 'D'
+    q1type = 'course'
+    if q1type == 'basili':
+       if (mlog2(nu*2)-2) >= m:
+          q1 = 'A'
+       elif (mlog2(nu*2)-1) >= m:
+          q1 = 'B'
+       elif mlog2(nu*2) >= m:
+          q1 = 'C'
+       elif mlog2(nu*2) < m:
+          q1 = 'D'
+       else:
+          q1 = 'E'
+    elif q1type == 'course':
+         if d <= 50. and nu*2 > (m*10.0+1):
+            q1 = 'A'
+         elif d <= 100.0 and nu*2 > (m*7.5+1):
+            q1 = 'B'
+         elif d <= 150.0 and nu*2 > (m*5.0+1):
+            q1 = 'C'
+         else:
+            q1 = 'D'
     # defining position 2 (by Alberto Basili for INGV Locator code, statement since 2010)
     #A = rms<=0.2
     #B = 0.2<rms<=0.3
     #C = 0.3<rms<=0.4
     #D = 0.4<rms
-    
     if r <= 0.2:
        q2 = 'A'
     elif r > 0.2 and r <= 0.3:
