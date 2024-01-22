@@ -39,6 +39,10 @@
 #         the rest is downweighted as hm_cutoff/(distance_from_the_mean)
 #    In both cases stations with hypocentral distance lower than mindist (tipically 10km) and higher than maxdist (tipically 600) are excluded
 
+
+# A totally new version of pyml will probably come following the suggestions from Merlin/ChatGPT4 at this chat link https://www.getmerlin.in/share/chat/O5mRRFtUZ17
+
+
 import argparse,sys,os,glob,copy,pwd,pathlib,itertools,getpass,socket
 from geographiclib.geodesic import Geodesic
 import pandas
