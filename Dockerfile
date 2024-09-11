@@ -19,11 +19,12 @@ RUN apt-get clean \
         vim
 
 # Adding python3 libraries
+RUN python3 -m pip install --upgrade pip
 RUN python3 -m pip install numpy
 RUN python3 -m pip install obspy
 RUN python3 -m pip install pyrocko
 RUN python3 -m pip install plotly
-RUN python3 -m pip install sklearn
+#RUN python3 -m pip install sklearn
 RUN python3 -m pip install scipy
 RUN python3 -m pip install pandas
 RUN python3 -m pip install geographiclib
