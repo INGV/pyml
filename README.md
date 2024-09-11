@@ -26,7 +26,7 @@ docker build --no-cache --pull --tag ingv/pyml .
 ### Run docker
 To run the container, use the command below; the `-v` option is used to "mount" working directory into container:
 ```
-docker run --user $(id -u):$(id -g) --rm -v $(pwd)/example/input:/opt/data ingv/pyml --json /opt/data/eventid_28745631.json 
+docker run --rm -v $(pwd)/examples/input:/opt/data ingv/pyml --in_file_name /opt/data/eventid_28745631.json --in_file_format json --out_format json
 ```
 
 ## Contribute
