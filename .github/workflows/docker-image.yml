@@ -74,3 +74,16 @@ jobs:
           destination_container_repo: ${{ env.IMAGE_NAME }}
           readme_file: 'README.md'
           short_description: 'Python code to calculate ML with different methods and attenuation functions.'
+
+  test-publiccode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run publiccode parser
+        run: |
+          docker run -i --rm italia/publiccode-parser-go /dev/stdin < publiccode.yml
