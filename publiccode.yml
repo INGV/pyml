@@ -2,7 +2,7 @@
 # metadata file that makes public software easily discoverable.
 # More info at https://github.com/italia/publiccode.yml
 
-publiccodeYmlVersion: '0.2'
+publiccodeYmlVersion: '0.4.0'
 name: 'INGV - PyML' 
 releaseDate: '2024-09-13'
 url: 'https://github.com/INGV/pyml'
@@ -26,7 +26,6 @@ maintenance:
     - name: Valentino Lauciani
       email: valentino.lauciani@ingv.it
 legal:
-  authorsFile: AUTHORS.md 
   repoOwner: 'Istituto Nazionale di Geofisica e Vulcanologia - INGV'
   license: 'AGPL-3.0-or-later'
 intendedAudience:
@@ -42,9 +41,8 @@ it:
     codiceIPA: ingv
 description:
   en:
-    genericName: pyml
     shortDescription: >-
-      Python code, complementary to pyamp, to calculate ML with different 
+      Python code to calculate ML with different 
       methods and attenuation functions using pyamp_amplitude output file or database table.
     documentation: 'https://github.com/INGV/pyml/blob/main/README.md'
     longDescription: >
