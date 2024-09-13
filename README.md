@@ -12,7 +12,7 @@
 
 ![Dynamic YAML Badge](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FINGV%2Fpyml%2Fmain%2F.github%2Fworkflows%2Fdocker-image.yml&query=%24..platforms&style=flat&logo=amazonec2&logoColor=white&logoSize=auto&label=Supported%20Arch)
 
-# pyml ![GitHub Tag](https://img.shields.io/github/v/tag/ingv/pyml?sort=semver&style=flat) | [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ingv/pyml/docker-image.yml?branch=main&style=flat&logo=GitHub-Actions&logoColor=white&logoSize=auto&label=GitHub%20Actions)](https://github.com/INGV/pyml/actions)
+# pyml [![Version](https://img.shields.io/badge/dynamic/yaml?label=ver&query=softwareVersion&url=https://raw.githubusercontent.com/INGV/pyml/main/publiccode.yml)](https://github.com/INGV/pyml/blob/main/publiccode.yml) | [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ingv/pyml/docker-image.yml?branch=main&style=flat&logo=GitHub-Actions&logoColor=white&logoSize=auto&label=GitHub%20Actions)](https://github.com/INGV/pyml/actions)
 ## Introduction
 Python code, complementary to pyamp, to calculate ML with different methods and attenuation functions using pyamp_amplitude output file or database table.
 
