@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: CI/CD
 
 on:
   push:
@@ -10,17 +10,19 @@ on:
     branches:
       - "main"
 
-# Read: https://docs.docker.com/build/ci/github-actions/manage-tags-labels/
+env:
+  IMAGE_NAME: ingv/pyml
+
 jobs:
   build_and_push_to_registry:
     name: Build and Push Docker image to Docker Hub
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
@@ -31,17 +33,13 @@ jobs:
         with:
           # list of Docker images to use as base name for tags
           images: |
-            ingv/pyml
+            ${{ env.IMAGE_NAME }}
           # generate Docker tags based on the following events/attributes
           tags: |
-            type=schedule
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
-      
+            type=semver,pattern=latest,enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         
@@ -50,7 +48,7 @@ jobs:
         
       - name: Login to Docker Hub
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
@@ -61,11 +59,11 @@ jobs:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          ##tags: ingv/pyml:latest
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          
+          platforms: linux/amd64,linux/arm64
+
       - name: Push README to Dockerhub
         uses: christian-korneck/update-container-description-action@v1
         env:
@@ -73,6 +71,6 @@ jobs:
           DOCKER_PASS: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
         with:
           provider: dockerhub
-          destination_container_repo: ingv/pyml
+          destination_container_repo: ${{ env.IMAGE_NAME }}
           readme_file: 'README.md'
           short_description: 'Python code to calculate ML with different methods and attenuation functions.'
