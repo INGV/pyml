@@ -3,12 +3,12 @@
 # More info at https://github.com/italia/publiccode.yml
 
 publiccodeYmlVersion: '0.2'
-name: 'INGV - FDSNWS Fetcher' 
+name: 'INGV - PyML' 
 releaseDate: '2024-09-13'
-url: 'https://github.com/INGV/fdsnws-fetcher'
+url: 'https://github.com/INGV/pyml'
 logo: images/ingv_logo_text_two_lines.png
-landingURL: 'https://github.com/INGV/fdsnws-fetcher'
-softwareVersion: v1.1.0
+landingURL: 'https://github.com/INGV/pyml'
+softwareVersion: v2.52.0
 developmentStatus: stable
 softwareType: standalone/other
 platforms:
@@ -42,31 +42,21 @@ it:
     codiceIPA: ingv
 description:
   en:
-    genericName: fdsnws-fetcher
+    genericName: pyml
     shortDescription: >-
-      Docker used to retrieve "resp", "dless", "sac", "minified", "paz" or
-      "dataselect_list" from FDSN node.
-    documentation: 'https://github.com/INGV/fdsnws-fetcher/blob/master/README.md'
+      Python code, complementary to pyamp, to calculate ML with different 
+      methods and attenuation functions using pyamp_amplitude output file or database table.
+    documentation: 'https://github.com/INGV/pyml/blob/main/README.md'
     longDescription: >
-      This project is developed to interact with "station" and "dataselect" FDSN
-      (https://www.fdsn.org) Web Services:
-
-
-      - the "station" WS is used to retrieve station metadata:
-      https://www.fdsn.org/webservices/FDSN-WS-Specifications-1.2.pdf#page=11
-
-      - the "dataselect" WS is used to retrieve seismic waveform:
-      https://www.fdsn.org/webservices/FDSN-WS-Specifications-1.2.pdf#page=9
-
-
-      It is developed using docker technology and implements a set of software,
-      tools and script to find seismic stations by geographic constrain and time
-      window.
-
-
-      The output is RAW data like seismic "waveforms" in MSEED format or
-      metadata like response function in "SAC", "RESP" or "PAZ" (Poles and
-      Zeros) format.
-    localisedName: 'FDSNWS Fetcher'
+      Python code, complementary to pyamp, to calculate ML with different 
+      methods and attenuation functions using pyamp_amplitude output file or database table.
+      
+      Lorem ipsum odor amet, consectetuer adipiscing elit. Congue facilisi sagittis iaculis 
+      urna sagittis nascetur mollis. Aptent auctor finibus ut donec scelerisque morbi elit etiam fusce. 
+      Ante hendrerit cursus rutrum sapien cras commodo vivamus ad. Nunc quisque sit aptent potenti in nascetur. 
+      Finibus at semper torquent sollicitudin facilisi nunc inceptos. Lacinia nibh class sagittis 
+      ultrices nisi eleifend nibh vehicula. Rhoncus urna aliquam ligula accumsan aliquet turpis. 
+      Mollis cubilia proin dictumst, felis ridiculus tincidunt ac? Metus felis pharetra bibendum hac montes sit mi.
+    localisedName: 'PyML'
     features:
-      - Seismic waveform and metadata downloader
+      - Seismic magnitude calculator
