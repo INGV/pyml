@@ -1,10 +1,15 @@
-[![License](https://img.shields.io/github/license/INGV/pyml.svg)](https://github.com/INGV/pyml/blob/main/LICENSE) [![GitHub issues](https://img.shields.io/github/issues/INGV/pyml.svg)](https://github.com/INGV/pyml/issues)
+[![License](https://img.shields.io/github/license/INGV/pyml?label=License)](https://github.com/INGV/pyml/blob/main/LICENSE)
 
-[![Docker build](https://img.shields.io/badge/docker%20build-from%20CI-yellow)](https://hub.docker.com/r/ingv/pyml)![Docker Image Size (latest semver)](https://img.shields.io/docker/image-size/ingv/pyml?sort=semver)![Docker Pulls](https://img.shields.io/docker/pulls/ingv/pyml)
+[![DockerHub](https://img.shields.io/badge/DockerHub-link_to_repository-blueviolet?style=flat&logo=docker&logoColor=blue&logoSize=auto)](https://hub.docker.com/r/ingv/pyml)
+![DockerHub Image Size](https://img.shields.io/docker/image-size/ingv/pyml?sort=semver&style=flat&logo=docker&logoSize=auto&label=DockerHub%20Image%20Size)
+![DockerHub Pulls](https://img.shields.io/docker/pulls/ingv/pyml?style=flat&logo=docker&logoSize=auto&label=DockerHub%20Image%20Pull)
 
-[![CI](https://github.com/INGV/pyml/actions/workflows/docker-image.yml/badge.svg)](https://github.com/INGV/pyml/actions)[![GitHub](https://img.shields.io/static/v1?label=GitHub&message=Link%20to%20repository&color=blueviolet)](https://github.com/INGV/pyml)
+![GitHub Static Badge](https://img.shields.io/badge/GitHub-link_to_repository-blueviolet?style=flat&logo=github&logoSize=auto)
+[![GitHub Issues](https://img.shields.io/github/issues/INGV/pyml?label=GitHub%20Issues&logo=github)](https://github.com/INGV/pyml/issues)
 
-# pyml
+![Dynamic YAML Badge](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2FINGV%2Fpyml%2Fmain%2F.github%2Fworkflows%2Fdocker-image.yml&query=%24..platforms&style=flat&logo=amazonec2&logoColor=white&logoSize=auto&label=Supported%20Arch)
+
+# pyml ![GitHub Tag](https://img.shields.io/github/v/tag/ingv/pyml?sort=semver&style=flat) | [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ingv/pyml/docker-image.yml?branch=main&style=flat&logo=GitHub-Actions&logoColor=white&logoSize=auto&label=GitHub%20Actions)](https://github.com/INGV/pyml/actions)
 ## Introduction
 Python code, complementary to pyamp, to calculate ML with different methods and attenuation functions using pyamp_amplitude output file or database table.
 
