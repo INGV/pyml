@@ -846,7 +846,6 @@ for index, row in dfa.iterrows():
        minamp=row['minamp(m)']*unit
     except:
        try:
-          print("Ciao io sono AMP12",type(row['amp1']))
           minamp=row['amp1']*unit
           minamp = False if pandas.isna(row['amp1']) else minamp
        except:
