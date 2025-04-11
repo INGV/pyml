@@ -46,7 +46,7 @@ Here is a list of users who already contributed to this repository: \
 </a>
 
 ## Authors
-(c) 2024 Raffaele Distefano raffaele.distefano[at]ingv.it \
-(c) 2024 Valentino Lauciani valentino.lauciani[at]ingv.it
+(c) 2025 Raffaele Distefano raffaele.distefano[at]ingv.it \
+(c) 2025 Valentino Lauciani valentino.lauciani[at]ingv.it
 
 Istituto Nazionale di Geofisica e Vulcanologia, Italia
