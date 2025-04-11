@@ -638,7 +638,7 @@ def json_response_structure():
                          "time1": null,
                          "amp2": null,
                          "time2": null,
-                         "period": null,
+#                         "period": null,
 #                        "lat": null,
 #                        "lon": null,
 #                        "elev": null,
@@ -878,12 +878,9 @@ for index, row in dfa.iterrows():
           time_maxamp = False
     try:
        period=row['period']
+       period = False if pandas.isna(row['period']) else period
     except:
-       try:
-          period=row['period']
-          period = False if pandas.isna(row['period']) else period
-       except:
-          period = False
+       period = False
     # Station's coordinates
     try:
        stla=False if pandas.isna(row['lat']) else float(row['lat'])
@@ -1191,6 +1188,9 @@ for key in components_N:
 
     n,s,l,c,m = key.split('_')
     jstmag = copy.deepcopy(jstationmagnitude)
+    #sys.stderr.write("PeriodE: "+str(components_E[key][8])+"\n")
+    #sys.stderr.write("PeriodN: "+str(components_N[key][8])+"\n")
+    #sys.stderr.write("jstmag['period']:" + str(jstmag["period"] )+"\n")
     if components_N[key]:
             #logm = copy.deepcopy(jlogmessage)
             #logmch = copy.deepcopy(jlogmessagech)
@@ -1202,7 +1202,8 @@ for key in components_N:
             jstmag["time1"] = components_N[key][6]
             jstmag["amp2"] = components_N[key][1][1]
             jstmag["time2"] = components_N[key][7]
-            jstmag["period"] = components_N[key][8]
+            if components_N[key][8]:
+                jstmag["period"] = components_N[key][8]
             jstmag["ep_distance_km"] = components_N[key][2]
             jstmag["ep_distance_delta"] = components_N[key][3]
             jstmag["orig_distance"] = components_N[key][4]
@@ -1242,7 +1243,8 @@ for key in components_N:
             jstmag["time1"] = components_E[key][6]
             jstmag["amp2"] = components_E[key][1][1]
             jstmag["time2"] = components_E[key][7]
-            jstmag["period"] = components_E[key][8]
+            if components_E[key][8]:
+               jstmag["period"] = components_E[key][8]
             jstmag["ep_distance_km"] = components_E[key][2]
             jstmag["ep_distance_delta"] = components_E[key][3]
             jstmag["orig_distance"] = components_E[key][4]
