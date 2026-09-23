@@ -65,6 +65,10 @@ from datetime import datetime
 
 from math import sqrt as msqrt, log10 as mlog10, pow as mpow, log2 as mlog2
 
+import numpy as np
+import pandas as pd
+from obspy.geodetics.base import gps2dist_azimuth
+
 class MyParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write('error: %s\n' % message)
@@ -107,6 +111,137 @@ def get_config_dictionary(cfg, section):
             dict1[option] = None
     return dict1
 
+
+###################################################################
+
+def process_amplitudes_vectorized(dfa, origin, unit, max_lowcorner, delta_corner):
+    """
+    Sostituisce il blocco dfa.iterrows().
+    Pulisce i dati e calcola le distanze in logica vettoriale (NumPy/Pandas).
+    """
+    # 1. Uniformiamo i nomi e riempiamo i valori nulli in modo vettoriale
+    # Sfruttiamo le potenzialità di Pandas per gestire i missing values senza try/except continui
+    dfa['net'] = dfa.get('net', pd.Series(dtype=object)).fillna(False)
+    dfa['sta'] = dfa.get('sta', pd.Series(dtype=object)).fillna(False)
+    dfa['loc'] = dfa.get('loc', pd.Series(dtype=object)).fillna('--')
+    dfa['cha'] = dfa.get('cha', pd.Series(dtype=object)).fillna(False)
+    
+    # 2. Estrazione Ampiezze (Gestione flessibile delle colonne 'minamp(m)' vs 'amp1')
+    minamp_col = 'minamp(m)' if 'minamp(m)' in dfa.columns else 'amp1'
+    maxamp_col = 'maxamp(m)' if 'maxamp(m)' in dfa.columns else 'amp2'
+    time_min_col = 'minamptime' if 'minamptime' in dfa.columns else 'time1'
+    time_max_col = 'maxamptime' if 'maxamptime' in dfa.columns else 'time2'
+
+    # Forziamo il tipo a float64 per la massima precisione matematica
+    dfa['minamp'] = dfa[minamp_col].astype(np.float64) * unit
+    dfa['maxamp'] = dfa[maxamp_col].astype(np.float64) * unit
+    dfa['amp_calc'] = np.abs(dfa['maxamp'] - dfa['minamp']) / 2.0  # Vettoriale
+    
+    dfa['time_minamp'] = dfa[time_min_col]
+    dfa['time_maxamp'] = dfa[time_max_col]
+
+    # 3. Filtro rapido delle stazioni valide prima dei calcoli pesanti geodetici
+    # Manteniamo solo le righe dove net, sta, cha e coordinate esistono
+    valid_mask = (
+        (dfa['net'] != False) & (dfa['sta'] != False) & (dfa['cha'] != False) &
+        dfa['lat'].notna() & dfa['lon'].notna()
+    )
+    dfa_valid = dfa[valid_mask].copy()
+
+    # 4. Calcolo Distanze Vettorizzato
+    evla = float(origin['lat'])
+    evlo = float(origin['lon'])
+    evdp = float(origin['depth'])
+    
+    # Definiamo un wrapper vettorizzato per la funzione Obspy
+    def calc_dist_az(stla, stlo):
+        distmeters, azi, _ = gps2dist_azimuth(stla, stlo, evla, evlo)
+        return distmeters / 1000.0, azi
+
+    vec_dist_az = np.vectorize(calc_dist_az, otypes=[np.float64, np.float64])
+    
+    # Applichiamo il calcolo solo sulle coordinate valide in un solo colpo (Fast mapping)
+    dfa_valid['epi_dist_km'], dfa_valid['epi_azimuth'] = vec_dist_az(
+        dfa_valid['lat'].values, 
+        dfa_valid['lon'].values
+    )
+    
+    # Calcolo distanza ipocentrale usando NumPy strict math (algebra lineare su array)
+    # Rimpiazza la lentezza di msqrt e mpow
+    dfa_valid['stel_km'] = dfa_valid['elev'].astype(np.float64) / 1000.0
+    dfa_valid['hypo_dist'] = np.sqrt(
+        np.square(dfa_valid['epi_dist_km']) + np.square(evdp + dfa_valid['stel_km'])
+    )
+
+    return dfa_valid
+
+def calc_huttonboore_vec(a, d, s, uc):
+    """Vettorizzazione della legge Hutton & Boore"""
+    # s = 0 if not uc else s
+    s_arr = np.where(uc, s, 0.0)
+    # Ritorna np.nan invece di False in caso di valori invalidi (es. a <= 0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        m = np.where(a > 0, np.log10(a) + 1.110 * np.log10(d / 100.) + 0.00189 * (d - 100.) + 3.0 + s_arr, np.nan)
+    return m
+
+
+def calc_dibona_vec(a, d, s, uc):
+    """Vettorizzazione della legge Di Bona"""
+    s_arr = np.where(uc, s, 0.0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        m = np.where(a > 0, np.log10(a) + 1.667 * np.log10(d / 100.) + 0.001736 * (d - 100.) + 3.0 + s_arr, np.nan)
+    return m
+
+
+def apply_magnitudes_and_group(dfa_valid, dbcorr, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb, when_no_stcorr_db):
+    """
+    Sostituisce la seconda parte del ciclo iterrows.
+    Calcola ML in vettoriale e prepara i dati per i set N ed E.
+    """
+    # 1. Merge vettoriale delle correzioni di stazione (Di Bona)
+    if dbcorr is not False and not dbcorr.empty:
+        # Aggiungiamo la colonna 'c' di dbcorr associandola alla stazione ('sta')
+        dfa_valid = pd.merge(dfa_valid, dbcorr[['sta', 'c']], on='sta', how='left')
+        dfa_valid.rename(columns={'c': 's_dibona'}, inplace=True)
+        dfa_valid['s_dibona'] = dfa_valid['s_dibona'].fillna(False)
+    else:
+        dfa_valid['s_dibona'] = False
+
+    dfa_valid['s_hutton'] = False  # Da codice originale è sempre False
+
+    # Condizioni per il calcolo
+    calc_hb_mask = (dfa_valid['s_hutton'] != False) | ((dfa_valid['s_hutton'] == False) & when_no_stcorr_hb)
+    calc_db_mask = (dfa_valid['s_dibona'] != False) | ((dfa_valid['s_dibona'] == False) & when_no_stcorr_db)
+
+    # 2. Calcolo vettoriale delle ML
+    dfa_valid['ml_hb'] = np.nan
+    dfa_valid.loc[calc_hb_mask, 'ml_hb'] = calc_huttonboore_vec(
+        dfa_valid.loc[calc_hb_mask, 'amp_calc'].values,
+        dfa_valid.loc[calc_hb_mask, 'hypo_dist'].values,
+        dfa_valid.loc[calc_hb_mask, 's_hutton'].values,
+        use_stcorr_hb
+    )
+
+    dfa_valid['ml_db'] = np.nan
+    dfa_valid.loc[calc_db_mask, 'ml_db'] = calc_dibona_vec(
+        dfa_valid.loc[calc_db_mask, 'amp_calc'].values,
+        dfa_valid.loc[calc_db_mask, 'hypo_dist'].values,
+        dfa_valid.loc[calc_db_mask, 's_dibona'].values,
+        use_stcorr_db
+    )
+
+    # 3. Creazione della chiave univoca per stazione/canale
+    # Estrae i primi due caratteri del canale (es. 'HH' da 'HHN')
+    dfa_valid['cha_prefix'] = dfa_valid['cha'].str[0:2]
+    dfa_valid['components_key'] = dfa_valid['net'] + '_' + dfa_valid['sta'] + '_' + dfa_valid['loc'] + '_' + dfa_valid[
+        'cha_prefix']
+
+    # Identifica l'orientamento (N, E, Z)
+    dfa_valid['orientation'] = dfa_valid['cha'].str[2]
+
+    return dfa_valid
+
+######################################################################################
 def huttonboore(a,d,s,uc):
     # if uc (use_stcorr_hb) is True s is set to its entrance value and if this value is not False it is set to its value
     # if uc (use_stcorr_hb) is True s is set to its entrance value and if this value is False it is set to ZERO
@@ -818,192 +953,11 @@ unit=1000 # pyamp units
 if args.in_file_format == 'json':
    unit=1 #db units
 
-for index, row in dfa.iterrows():
-    #### Testing the basic data ####
-    # Channel Info
-    try:
-       net = row['net']
-       net = False if pandas.isna(row['net']) else net
-    except:
-       net = False
-    try:
-       sta = row['sta']
-       sta = False if pandas.isna(row['sta']) else sta
-    except:
-       sta = False
-    try:
-       loc = row['loc']
-       loc = "--" if not loc else loc
-    except:
-       loc = False
-    try:
-       cha = row['cha']
-       cha = False if pandas.isna(row['cha']) else cha
-    except:
-       cha = False
-    # Amplitudes
-    try:
-       minamp=row['minamp(m)']*unit
-    except:
-       try:
-          minamp=row['amp1']*unit
-          minamp = False if pandas.isna(row['amp1']) else minamp
-       except:
-          minamp = False
-    try:
-       maxamp=row['maxamp(m)']*unit
-    except:
-       try:
-          maxamp=row['amp2']*unit
-          maxamp = False if pandas.isna(row['amp2']) else maxamp
-       except:
-          maxamp = False
+# 1. Pulizia e calcolo distanze spaziali (tutto vettoriale con ObsPy + Numpy)
+dfa_valid = process_amplitudes_vectorized(dfa, origin, unit, max_lowcorner, delta_corner)
 
-    # Amplitudes times 
-    try:
-       time_minamp=row['minamptime']
-    except:
-       try:
-          time_minamp=row['time1']
-          time_minamp = False if pandas.isna(row['time1']) else time_minamp
-       except:
-          time_minamp = False
-    try:
-       time_maxamp=row['maxamptime']
-    except:
-       try:
-          time_maxamp=row['time2']
-          time_maxamp = False if pandas.isna(row['time2']) else time_maxamp
-       except:
-          time_maxamp = False
-    try:
-       period=row['period']
-       period = False if pandas.isna(row['period']) else period
-    except:
-       period = False
-    # Station's coordinates
-    try:
-       stla=False if pandas.isna(row['lat']) else float(row['lat'])
-       stlo=False if pandas.isna(row['lon']) else float(row['lon'])
-       stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
-    except:
-       stla=False
-       stlo=False
-       stel=False
-
-    check_list = {
-                  'net': net,
-                  'sta': sta,
-                  'loc': loc,
-                  'cha': cha,
-                  'minamp': minamp,
-                  'maxamp': maxamp,
-                  'time_minamp': time_minamp,
-                  'time_maxamp': time_maxamp,
-                  'stla': stla,
-                  'stlo': stlo
-                 }
-    false_keys = [key for key, value in check_list.items() if not value]
-    if 'net' in false_keys or 'sta' in false_keys or 'loc' in false_keys or 'cha' in false_keys:
-       continue
-    #if 'minamp' in false_keys or 'maxamp' in false_keys:
-    #   print(sta)
-
-    try:
-        corner_low=float(row['loco'])
-    except:
-        corner_low=False
-    try:
-        corner_high=float(row['hico'])
-    except:
-        corner_high=False
-    try:
-        met=row['method']
-
-    except:
-        met='ingv'
-    if args.clipped_info:
-       clp=clip.loc[(clip['net'] == net) & (clip['sta'] == sta) & (clip['cha'] == cha)]
-       if not clp.empty:
-          log_out.write(' '.join(("Component skipped:",str(net),str(sta),str(loc),str(cha)," due to cliping\n")))
-          continue
-    if corner_low and corner_high and (corner_low >= max_lowcorner or (corner_high-corner_low) < delta_corner):
-       log_out.write(' '.join(("Component skipped:",str(net),str(sta),str(loc),str(cha),str(corner_low),str(corner_high),"\n")))
-       continue
-    seed_id='.'.join((str(net),str(sta),str(loc),str(cha)))
-    if log_out:
-       log_out.write(' '.join(("Working on",seed_id,'\n')))
-    # In this block all the possibile conditions not to use this waveforms are checked so to reduce useless computing time
-    # First: get timing info from SAC to soon understand if this is a good cut or not for amplitude determination
-    #[distmeters,azi,bazi] = distaz(tr.stla,tr.stlo,tr.evla,tr.evlo)
-    #tr.dist=distmeters/1000.
-    components_key='_'.join((str(net),str(sta),str(loc),str(cha[0:2])))
-    cmp_keys.add(components_key)
-
-    try:
-        hypo_dist = row['ipodistance(km)']
-        epi_dist_km = row['epidistance(km)']
-        epi_dist_deg = False
-    except:
-        #calcolo le distanze
-        evla=float(origin['lat'])
-        evlo=float(origin['lon'])
-        evdp=float(origin['depth'])
-        if not stla or not stlo:
-           epi_dist_km = False
-           epi_dist_deg = False
-           hypo_dist = False
-           epi_azimuth = False
-        else:
-           geo_dict = geod.Inverse(evla,evlo,stla,stlo)
-           #distmeters = geo_dict['s12']
-           distdegrees = geo_dict['a12']
-           #azi = geo_dict['azi1']
-           #bazi = geo_dict['azi2']
-           [distmeters,azi,bazi] = distaz(stla,stlo,evla,evlo)
-           epi_dist_km = distmeters / km
-           epi_dist_deg = distdegrees
-           hypo_dist = msqrt(mpow(epi_dist_km,2)+mpow((evdp+stel),2))
-           epi_azimuth = azi
-        if log_out:
-           log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist_km),str(epi_dist_deg),str(hypo_dist),str(epi_azimuth),"\n")))
-        
-    ml = [False]*2
-    amp = abs(maxamp-minamp)/2
-    components_key_met=components_key+'_'+met
-    # Loading stations corrections
-    dbsite=sta
-    try:
-        s_dibona=float(dbcorr.loc[dbcorr['sta'] == dbsite, 'c'].iloc[0]) # Di Bona Station correction
-    except:
-        s_dibona=False
-    s_hutton=False # Station correction for Hutton and Boore formula
-
-    if s_hutton or (not s_hutton and when_no_stcorr_hb):
-       try:
-           ml[0] = huttonboore(amp,hypo_dist,s_hutton,use_stcorr_hb)
-       except:
-           ml[0] = False
-    else:
-       ml[0] = False
-
-    if s_dibona or (not s_dibona and when_no_stcorr_db):
-       try:
-           ml[1] = dibona(amp,hypo_dist,s_dibona,use_stcorr_db)
-       except:
-           ml[1] = False
-    else:
-       ml[1] = False
-
-    if cha[2] == 'N':
-       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,stel*km,epi_azimuth]
-    elif cha[2] == 'E':
-       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,stel*km,epi_azimuth]
-    elif cha[2] == 'Z':
-       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,stel*km,epi_azimuth]
-    else:
-       if log_out:
-          log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
+# 2. Calcolo Magnitudo (H&B, Di Bona) e Merge Correzioni (tutto vettoriale Pandas)
+dfa_processed = apply_magnitudes_and_group(dfa_valid, dbcorr, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb, when_no_stcorr_db)
 
 # Hutton and Boore
 mean_hb_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
