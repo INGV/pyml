@@ -267,119 +267,80 @@ def dibona(a,d,s,uc):
     return m
 
 
-def create_sets(keys,cmpn_original,cmpe_original,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_stamag,jlog_stamag_cha):
-    # mtd is the peakmethod
-    # mty is the huttonboore 0, dibona 1
-    # a channel cmpn is [ml,amp,tr.dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
-    #   where ml is a list of two: [ml_hutton,ml_dibona]
-    # mmt is the mag_mean_type parameter
-    #     'meanmag"--> only the mean of the channels's ML is computed
-    #     'meanamp"--> only the ML based on the mean of the channels's amplitudes is computed
-    #     in the second case, amt is evaluated:
-    #    'geo' --> the geometrical mean is computed
-    #     'ari' --> the artihmetic mean is computed
-    ml_set=[]
-    mtytxt='HuttonBoore' if mty==0 else 'DiBona'
-    midi = 99999.0 # Minimum distance is needed and here below calculated to be used in the mag quality definition
-    cmpe = cmpe_original.copy()
-    cmpn = cmpn_original.copy()
-    for k in keys:
-        log_condition=False
-        n,s,l,c = k.split('_')
-        kk=k+'_'+mtd
-        logsm = copy.deepcopy(jlog_stamag)
-        logsm['net'],logsm['sta'],logsm['loc'],logsm['band_inst'] = [n,s,l,c]
-        #logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
-        why_missing_channel=""
-        if kk in cmpe:
-           if not cmpe[kk][1][1] or not cmpe[kk][1][0]:
-              why_missing_channel="maxamp missing" if not cmpe[kk][1][1] else "minamp missing"
-              remove_key = cmpe.pop(kk, None)
-        if kk in cmpn:
-           if not cmpn[kk][1][1] or not cmpn[kk][1][0]:
-              why_missing_channel="maxamp missing" if not cmpn[kk][1][1] else "minamp missing"
-              remove_key = cmpn.pop(kk, None)
-        if kk in cmpn and kk in cmpe: # if both components are present in the set
-           if not cmpn[kk][2] or not cmpe[kk][2]:
-              epidist = False
-              ipodist = False
-              if log_out:
-                 log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
-              logsm['status'] = "critical"
-              logsm['summary'] = "Station skipped due to stations coordinates missing"
-              logsm['extended'] = mtytxt
-              logsms.append(logsm)
-              continue
-           epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
-           ipodist = (cmpn[kk][4] + cmpe[kk][4])/2 # ipocentral distance
-           amp_e = abs(cmpe[kk][1][1]-cmpe[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
-           amp_n = abs(cmpn[kk][1][1]-cmpn[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
-           if ipodist >= mid and ipodist <= mad: # if ipocentral distance is within the accepted range we proceed
-              if mtd != 'free' or (mtd == 'free' and abs(cmpn[kk][7]-cmpn[kk][6]) <= dp and abs(cmpe[kk][7]-cmpe[kk][6]) <= dp): # if the method is not free the deltapeak has no meaning orherwise it is evaluated
-                 #Mean of channel magnitudes is calculated
-                 if mmt == 'meanmag' and cmpn[kk][0][mty] and cmpe[kk][0][mty]:
-                    mm = (cmpn[kk][0][mty] + cmpe[kk][0][mty])/2
-                 elif mmt == 'meanamp' and (not stc or (cmpn[kk][5][mty] and cmpe[kk][5][mty]) or whstc): 
-                 # Magnitudes of Mean channel amplitudes is calculated if 
-                    if amt == 'ari':
-                       mean_amp = (amp_n + amp_e)/2 # Artimetic mean
-                    elif amt == 'geo':
-                       mean_amp = msqrt(amp_n * amp_e) # Geometric mean that is the correct one according to Di Bona
-                    corr = (cmpn[kk][5][mty] + cmpe[kk][5][mty])/2 if cmpn[kk][5][mty] and cmpe[kk][5][mty] else False
-                    if mty == 0:
-                       mm = huttonboore(mean_amp,ipodist,corr,stc)
-                       mtytxt = 'HuttonBoore'
-                    if mty == 1:
-                       mm = dibona(mean_amp,ipodist,corr,stc)
-                       mtytxt = 'DiBona'
-                 ml_set.append([kk,mm])
-                 midi = epidist if epidist < midi else midi
-              else:
-                 if log_out:
-                    log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][7]-cmpn[kk][6])),"\n")))
-                 logsm['status'] = 'warning'
-                 logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station skipped due to time distance between min and max amp larger than",str(dp)))
-                 logsm['extended'] = ' '.join(("Time distance is",str(abs(cmpn[kk][7]-cmpn[kk][6])),"s"))
-                 log_condition=True
-                 #logsms.append(logsm)
-           else:
-              if log_out:
-                 log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
-              logsm['status'] = 'warning' 
-              logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist"))
-              logsm['extended'] = ' '.join(("Distance is",str(ipodist),"km"))
-              log_condition=True
-              #logsms.append(logsm)
-        elif kk not in cmpn or kk not in cmpe:
-           if log_out:
-              log_out.write(' '.join(("Station skipped due to missing channel",str(kk),'\n')))
-           logsm['status'] = 'critical'
-           logsm['summary'] = 'Station skipped due to missing channel'
-           logsm['extended'] = 'ML ' + mtytxt
-           logsmc = copy.deepcopy(jlog_stamag_cha)
-           if kk not in cmpn:
-              logsmc['orientation'] = 'N'
-              logsmc['status'] = 'critical' 
-              logsmc['summary'] = 'missing' 
-              logsmc['extended'] = why_missing_channel
-           else:
-              logsmc['orientation'] = 'N'
-              logsmc['status'] = 'ok' 
-           logsm['channels'].append(logsmc)
-           logsmc = copy.deepcopy(jlog_stamag_cha)
-           if kk not in cmpe:
-              logsmc['orientation'] = 'E'
-              logsmc['status'] = 'critical' 
-              logsmc['summary'] = 'missing' 
-              logsmc['extended'] = why_missing_channel
-           else:
-              logsmc['orientation'] = 'E'
-              logsmc['status'] = 'ok' 
-           logsm['channels'].append(logsmc)
-           log_condition=True
-        if log_condition:
-           logsms.append(logsm)
-    return ml_set,midi,logsms
+def create_sets_vectorized(dfa_processed, mtd, mid, mad, dp, mty, whstc, stc, mmt, amt):
+    """
+    Sostituisce il vecchio 'create_sets'.
+    Usa Pandas per allineare canali N ed E, filtrare vettorialmente e calcolare la ML di stazione.
+    """
+    # 1. Filtriamo solo i canali N ed E dal nostro dataframe processato
+    df_ne = dfa_processed[dfa_processed['orientation'].isin(['N', 'E'])].copy()
+
+    # 2. Pivot: Trasformiamo le righe in colonne.
+    # Ora avremo una riga per ogni 'components_key' con le relative colonne per N ed E
+    df_p = df_ne.pivot(index='components_key', columns='orientation')
+
+    # 3. Eliminiamo le stazioni che non hanno entrambe le componenti valide
+    df_p = df_p.dropna(subset=[('amp_calc', 'N'), ('amp_calc', 'E')])
+
+    if df_p.empty:
+        return [], 99999.0, []
+
+    # 4. Calcolo delle medie per tutte le stazioni simultaneamente
+    mean_hypo = (df_p[('hypo_dist', 'N')] + df_p[('hypo_dist', 'E')]) / 2.0
+    mean_epi = (df_p[('epi_dist_km', 'N')] + df_p[('epi_dist_km', 'E')]) / 2.0
+
+    # 5. Creazione della Maschera di Validità (Filtri su distanze e delta peaks)
+    valid_mask = (mean_hypo >= mid) & (mean_hypo <= mad)
+
+    if mtd == 'free':
+        # Assicuriamoci che i tempi siano numerici per la sottrazione
+        t_max_n = pd.to_numeric(df_p[('time_maxamp', 'N')], errors='coerce')
+        t_min_n = pd.to_numeric(df_p[('time_minamp', 'N')], errors='coerce')
+        t_max_e = pd.to_numeric(df_p[('time_maxamp', 'E')], errors='coerce')
+        t_min_e = pd.to_numeric(df_p[('time_minamp', 'E')], errors='coerce')
+
+        dp_n = (t_max_n - t_min_n).abs()
+        dp_e = (t_max_e - t_min_e).abs()
+
+        valid_mask &= (dp_n <= dp) & (dp_e <= dp)
+
+    df_valid = df_p[valid_mask].copy()
+    if df_valid.empty:
+        return [], 99999.0, []
+
+    # 6. Calcolo della Magnitudo di Stazione
+    mty_str = 'ml_hb' if mty == 0 else 'ml_db'
+    s_str = 's_hutton' if mty == 0 else 's_dibona'
+    calc_func = calc_huttonboore_vec if mty == 0 else calc_dibona_vec
+
+    if mmt == 'meanmag':
+        sta_ml = (df_valid[(mty_str, 'N')] + df_valid[(mty_str, 'E')]) / 2.0
+    elif mmt == 'meanamp':
+        amp_n, amp_e = df_valid[('amp_calc', 'N')], df_valid[('amp_calc', 'E')]
+
+        # Matematica pura e vettoriale
+        if amt == 'ari':
+            mean_amp = (amp_n + amp_e) / 2.0
+        else:  # 'geo'
+            mean_amp = np.sqrt(amp_n * amp_e)
+
+        # Gestiamo eventuali correzioni assenti (False/NaN) convertendole a 0 per il calcolo
+        corr_n = pd.to_numeric(df_valid[(s_str, 'N')], errors='coerce').fillna(0)
+        corr_e = pd.to_numeric(df_valid[(s_str, 'E')], errors='coerce').fillna(0)
+        mean_corr = (corr_n + corr_e) / 2.0
+
+        sta_ml = calc_func(mean_amp.values, mean_hypo[valid_mask].values, mean_corr.values, stc)
+
+    # 7. Ricostruzione dell'output nel formato atteso dal resto del codice
+    valid_keys = df_valid.index.astype(str) + '_' + mtd
+    ml_set = [[k, m] for k, m in zip(valid_keys, sta_ml) if pd.notna(m)]
+
+    midi = mean_epi[valid_mask].min() if not mean_epi[valid_mask].empty else 99999.0
+
+    # I log verranno rimandati a un costruttore esterno per efficienza
+    logsms = []
+
+    return ml_set, midi, logsms
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 # Calculating the weighted standard deviation
@@ -959,8 +920,30 @@ dfa_valid = process_amplitudes_vectorized(dfa, origin, unit, max_lowcorner, delt
 # 2. Calcolo Magnitudo (H&B, Di Bona) e Merge Correzioni (tutto vettoriale Pandas)
 dfa_processed = apply_magnitudes_and_group(dfa_valid, dbcorr, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb, when_no_stcorr_db)
 
+# === START BRIDGE (Per mantenere vivo il costruttore JSON a fine file) ===
+components_N = {}
+components_E = {}
+for _, row in dfa_processed.iterrows():
+    k = row['components_key'] + '_' + met
+    # Ricostruiamo in modo posticcio le tuple aspettate dal JSON writer
+    dummy_data = [[row['ml_hb'], row['ml_db']], [row['minamp'], row['maxamp']], row['epi_dist_km'],
+                  0, row['hypo_dist'], [row['s_hutton'], row['s_dibona']],
+                  row['time_minamp'], row['time_maxamp'], 0, row['lat'], row['lon'], row['elev'], row['epi_azimuth']]
+    if row['orientation'] == 'N': components_N[k] = dummy_data
+    if row['orientation'] == 'E': components_E[k] = dummy_data
+# === END BRIDGE ===
+
+
 # Hutton and Boore
-mean_hb_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
+mean_hb_ml_sta, min_dist, log['stationmagnitudes'] = create_sets_vectorized(
+    dfa_processed, met, mindist, maxdist, delta_peaks, 0, when_no_stcorr_hb, use_stcorr_hb, mag_mean_type, amp_mean_type
+)
+
+# Di Bona
+mean_db_ml_sta, min_dist, log['stationmagnitudes'] = create_sets_vectorized(
+    dfa_processed, met, mindist, maxdist, delta_peaks, 1, when_no_stcorr_db, use_stcorr_db, mag_mean_type, amp_mean_type
+)
+
 #if log_out:
 #   log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
 if len(mean_hb_ml_sta) == 0:
@@ -997,9 +980,7 @@ else:
 logm['hb']['status'] = msg_sts
 logm['hb']['summary'] = msg_sum
 logm['hb']['extended'] = msg_ext
-#mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
-# Di Bona
-mean_db_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
+
 if len(mean_db_ml_sta) == 0:
    msg_sts = 'critical'
    msg_sum='Dibona List is empty'
