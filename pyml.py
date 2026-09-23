@@ -39,34 +39,25 @@
 #         the rest is downweighted as hm_cutoff/(distance_from_the_mean)
 #    In both cases stations with hypocentral distance lower than mindist (tipically 10km) and higher than maxdist (tipically 600) are excluded
 
-import argparse,sys,os,glob,copy,pwd,pathlib,itertools,getpass,socket
+# --- Libreria Standard Python ---
+import argparse
+import copy
 import decimal
-
-from geographiclib.geodesic import Geodesic
-import pandas
-import time
+import getpass
 import json
-
-# Imports from obpsy
-from obspy import read
-from obspy.geodetics.base import gps2dist_azimuth as distaz
-from scipy.stats import median_abs_deviation
-
-from numpy import where as np_where
-from numpy import sum as np_sum
-from numpy import square as np_square
-from numpy import errstate as np_errstate
-from numpy import median as np_median
-from numpy import ones as np_ones
-from numpy import array as np_array
-from numpy import asarray as np_asarray
-
+import os
+import socket
+import sys
 from datetime import datetime
+import configparser as cp
 
-from math import sqrt as msqrt, log10 as mlog10, pow as mpow, log2 as mlog2
-
+# --- Numerical and Data Managing Libraries ---
 import numpy as np
 import pandas as pd
+from scipy.stats import median_abs_deviation
+
+# --- Geodetic and Sismological Libraries ---
+from geographiclib.geodesic import Geodesic
 from obspy.geodetics.base import gps2dist_azimuth
 
 class MyParser(argparse.ArgumentParser):
@@ -90,12 +81,6 @@ def parseArguments():
         args=parser.parse_args()
         return args
 
-# Depending on the python version the configparser has different names so ... try
-try:
-    import ConfigParser as cp
-except ImportError:
-    import configparser as cp
-
 # Build a dictionary from config file section
 def get_config_dictionary(cfg, section):
     dict1 = {}
@@ -116,64 +101,74 @@ def get_config_dictionary(cfg, section):
 
 def process_amplitudes_vectorized(dfa, origin, unit, max_lowcorner, delta_corner):
     """
-    Sostituisce il blocco dfa.iterrows().
-    Pulisce i dati e calcola le distanze in logica vettoriale (NumPy/Pandas).
+    Pulisce i dati, gestisce le distanze (sia precalcolate CSV che da calcolare via Obspy/JSON)
+    ed estrae il metodo operativo in logica Pandas.
     """
-    # 1. Uniformiamo i nomi e riempiamo i valori nulli in modo vettoriale
-    # Sfruttiamo le potenzialità di Pandas per gestire i missing values senza try/except continui
     dfa['net'] = dfa.get('net', pd.Series(dtype=object)).fillna(False)
     dfa['sta'] = dfa.get('sta', pd.Series(dtype=object)).fillna(False)
     dfa['loc'] = dfa.get('loc', pd.Series(dtype=object)).fillna('--')
     dfa['cha'] = dfa.get('cha', pd.Series(dtype=object)).fillna(False)
-    
-    # 2. Estrazione Ampiezze (Gestione flessibile delle colonne 'minamp(m)' vs 'amp1')
+
+    # Estrazione sicura del parametro 'met' tramite esplorazione colonne Pandas
+    if 'method' in dfa.columns:
+        met = str(dfa['method'].iloc[0])
+    else:
+        met = 'ingv'
+
     minamp_col = 'minamp(m)' if 'minamp(m)' in dfa.columns else 'amp1'
     maxamp_col = 'maxamp(m)' if 'maxamp(m)' in dfa.columns else 'amp2'
     time_min_col = 'minamptime' if 'minamptime' in dfa.columns else 'time1'
     time_max_col = 'maxamptime' if 'maxamptime' in dfa.columns else 'time2'
 
-    # Forziamo il tipo a float64 per la massima precisione matematica
     dfa['minamp'] = dfa[minamp_col].astype(np.float64) * unit
     dfa['maxamp'] = dfa[maxamp_col].astype(np.float64) * unit
-    dfa['amp_calc'] = np.abs(dfa['maxamp'] - dfa['minamp']) / 2.0  # Vettoriale
-    
+    dfa['amp_calc'] = np.abs(dfa['maxamp'] - dfa['minamp']) / 2.0
+
     dfa['time_minamp'] = dfa[time_min_col]
     dfa['time_maxamp'] = dfa[time_max_col]
 
-    # 3. Filtro rapido delle stazioni valide prima dei calcoli pesanti geodetici
-    # Manteniamo solo le righe dove net, sta, cha e coordinate esistono
     valid_mask = (
-        (dfa['net'] != False) & (dfa['sta'] != False) & (dfa['cha'] != False) &
-        dfa['lat'].notna() & dfa['lon'].notna()
+            (dfa['net'] != False) & (dfa['sta'] != False) & (dfa['cha'] != False)
     )
     dfa_valid = dfa[valid_mask].copy()
 
-    # 4. Calcolo Distanze Vettorizzato
-    evla = float(origin['lat'])
-    evlo = float(origin['lon'])
-    evdp = float(origin['depth'])
-    
-    # Definiamo un wrapper vettorizzato per la funzione Obspy
-    def calc_dist_az(stla, stlo):
-        distmeters, azi, _ = gps2dist_azimuth(stla, stlo, evla, evlo)
-        return distmeters / 1000.0, azi
+    # 4. Calcolo Distanze (Logica Ibrida NumPy vettorializzata)
+    if 'ipodistance(km)' in dfa_valid.columns and 'epidistance(km)' in dfa_valid.columns:
+        # Percorso CSV: assegnazione istantanea da array, skip operazioni Obspy
+        dfa_valid['epi_dist_km'] = dfa_valid['epidistance(km)'].astype(np.float64)
+        dfa_valid['hypo_dist'] = dfa_valid['ipodistance(km)'].astype(np.float64)
+        dfa_valid['epi_azimuth'] = 0.0  # Placeholder se non c'è azimuth
+    else:
+        # Percorso JSON: calcolo geodetico Obspy+NumPy
+        if origin and 'lat' in origin and 'lon' in origin:
+            # Controllo validità coordinate stazione
+            valid_coord_mask = dfa_valid['lat'].notna() & dfa_valid['lon'].notna()
+            dfa_valid = dfa_valid[valid_coord_mask].copy()
 
-    vec_dist_az = np.vectorize(calc_dist_az, otypes=[np.float64, np.float64])
-    
-    # Applichiamo il calcolo solo sulle coordinate valide in un solo colpo (Fast mapping)
-    dfa_valid['epi_dist_km'], dfa_valid['epi_azimuth'] = vec_dist_az(
-        dfa_valid['lat'].values, 
-        dfa_valid['lon'].values
-    )
-    
-    # Calcolo distanza ipocentrale usando NumPy strict math (algebra lineare su array)
-    # Rimpiazza la lentezza di msqrt e mpow
-    dfa_valid['stel_km'] = dfa_valid['elev'].astype(np.float64) / 1000.0
-    dfa_valid['hypo_dist'] = np.sqrt(
-        np.square(dfa_valid['epi_dist_km']) + np.square(evdp + dfa_valid['stel_km'])
-    )
+            evla = float(origin['lat'])
+            evlo = float(origin['lon'])
+            evdp = float(origin['depth'])
 
-    return dfa_valid
+            def calc_dist_az(stla, stlo):
+                distmeters, azi, _ = gps2dist_azimuth(stla, stlo, evla, evlo)
+                return distmeters / 1000.0, azi
+
+            vec_dist_az = np.vectorize(calc_dist_az, otypes=[np.float64, np.float64])
+            dfa_valid['epi_dist_km'], dfa_valid['epi_azimuth'] = vec_dist_az(
+                dfa_valid['lat'].values,
+                dfa_valid['lon'].values
+            )
+
+            dfa_valid['stel_km'] = dfa_valid['elev'].astype(np.float64) / 1000.0
+            dfa_valid['hypo_dist'] = np.sqrt(
+                np.square(dfa_valid['epi_dist_km']) + np.square(evdp + dfa_valid['stel_km'])
+            )
+        else:
+            sys.stderr.write("Dati di origine mancanti per il calcolo delle distanze.\n")
+            sys.exit(1)
+
+    # Restituiamo anche 'met' così il main può usarlo
+    return dfa_valid, met
 
 def calc_huttonboore_vec(a, d, s, uc):
     """Vettorizzazione della legge Hutton & Boore"""
@@ -249,7 +244,7 @@ def huttonboore(a,d,s,uc):
     s = 0 if not uc else s # station correction is set to 0 if use_stcorr_hb is False
     s = 0 if not s else s # station correction is set to 0 if it is False
     try:
-       m = mlog10(a) + 1.110*mlog10(d / 100.) + 0.00189*(d - 100.) + 3.0 + s # Hutton & Boore with s added but not confirmed if it is correct
+       m = np.log10(a) + 1.110*np.log10(d / 100.) + 0.00189*(d - 100.) + 3.0 + s # Hutton & Boore with s added but not confirmed if it is correct
     except:
        m = False
     return m
@@ -261,7 +256,7 @@ def dibona(a,d,s,uc):
     s = 0 if not uc else s # station correction is set to 0 if use_stcorr_hb is False
     s = 0 if not s else s # station correction is set to 0 if it is False
     try:
-       m = mlog10(a) + 1.667*mlog10(d / 100.) + 0.001736*(d - 100.) + 3.0 + s # Massimo Di Bona
+       m = np.log10(a) + 1.667*np.log10(d / 100.) + 0.001736*(d - 100.) + 3.0 + s # Massimo Di Bona
     except:
        m = False
     return m
@@ -363,23 +358,23 @@ def wstd(v,wm,wf):
     if len(v) <= 1:
        wsd = False
     else:
-       index_not_zero = np_where(wf > eps2)[0]
+       index_not_zero = np.where(wf > eps2)[0]
        wf_nz = wf[index_not_zero]
        #print("wf_nz: ",wf_nz)
        v_nz  = v[index_not_zero]
-       wsd = np_sum(wf_nz*np_square((v_nz-wm)))
-       fac = ((len(wf_nz)-1)/len(wf_nz))*np_sum(wf_nz)
+       wsd = np.sum(wf_nz*np.square((v_nz-wm)))
+       fac = ((len(wf_nz)-1)/len(wf_nz))*np.sum(wf_nz)
        wsd = wsd / max(fac,eps2)
-       wsd = msqrt(max(wsd,eps2))
+       wsd = np.sqrt(max(wsd,eps2))
     return wsd 
 
 def whuber(v,w_mean,ruse,zero):
     res = abs(v - w_mean)
-    with np_errstate(divide='ignore'):
-         w = np_where(res <= ruse,1.0,np_where(res > zero,0.0,ruse/res))
+    with np.errstate(divide='ignore'):
+         w = np.where(res <= ruse,1.0,np.where(res > zero,0.0,ruse/res))
     #print("W: ",w)
     try:
-       w_mean = np_sum(v * w)/np_sum(w)
+       w_mean = np.sum(v * w)/np.sum(w)
     except Exception as e:
        sys.stderr.write(("Error calculalting the Huber Mean",e))
        w_mean = False
@@ -404,7 +399,7 @@ def rm_outliers(v,v_w,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
     #v_flag = v_flag[not_outlier]
     if len(v[not_outlier]) > 0:
        v_std  = median_abs_deviation(v[not_outlier])
-       v_mean = np_median(v[not_outlier])
+       v_mean = np.median(v[not_outlier])
        n_v_flag = len(v[not_outlier])
     else:
        v_std  = False
@@ -413,20 +408,20 @@ def rm_outliers(v,v_w,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
     return v_mean,v_std,v_w,skip
 
 def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
-    v = np_array(magnitudes)
+    v = np.array(magnitudes)
     s = magnitudes_sta
     ruse = hm_cutoff
     # Calculate starting values from m (magnitudes) vector
     # We here use a median and mad instead of the mean and std as stating values because they are more robust
     # Names are taken from Huber Mean routine by Franco Mele for coherence
-    xmd = np_median(v)
+    xmd = np.median(v)
     xmd_std  = median_abs_deviation(v)
     vlen_start = len(v)
     n = 1
     finished = False
     if hm_cutoff:
        ruse,zero = [hm_cutoff,9999.0] if isinstance(hm_cutoff,float) else hm_cutoff
-    weights = np_ones(len(v))
+    weights = np.ones(len(v))
     removed=[]
     while not finished:
           amd = xmd
@@ -452,7 +447,7 @@ def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cut
              finished = True
              whystop=typemean+'_maxit='+str(n)+'_xmdvar='+str(xmd_var)
           n += 1
-    vlen_stop = round(np_sum(weights),2)
+    vlen_stop = round(np.sum(weights),2)
     return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights,whuber_fail
 
 def char_quality(nu,nw,d,m,r):
@@ -467,13 +462,13 @@ def char_quality(nu,nw,d,m,r):
     # the adopted parameters, we multiply nu by 2 channels
     q1type = 'course'
     if q1type == 'basili':
-       if (mlog2(nu*2)-2) >= m:
+       if (np.log2(nu*2)-2) >= m:
           q1 = 'A'
-       elif (mlog2(nu*2)-1) >= m:
+       elif (np.log2(nu*2)-1) >= m:
           q1 = 'B'
-       elif mlog2(nu*2) >= m:
+       elif np.log2(nu*2) >= m:
           q1 = 'C'
-       elif mlog2(nu*2) < m:
+       elif np.log2(nu*2) < m:
           q1 = 'D'
        else:
           q1 = 'E'
@@ -533,7 +528,7 @@ def standard_pyml_load(infile,eventid,conf_file,log_out,f):
     
    
    #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
-   dfa=pandas.read_csv(f,sep=';',index_col=False)
+   dfa=pd.read_csv(f,sep=';',index_col=False)
    dfa.columns = dfa.columns.str.lower()
    
    # Here we load the basic condition to decide if to proceed or not
@@ -639,9 +634,9 @@ def json_pyml_load(json_in):
    except:
       origin=False
    try:
-      dfa = pandas.DataFrame(json_in['data']['amplitudes'])
+      dfa = pd.DataFrame(json_in['data']['amplitudes'])
    except:
-      dfa=pandas.DataFrame()
+      dfa=pd.DataFrame()
    return dfa,config,origin
 
 # JSON ENCODER CLASS
@@ -804,6 +799,7 @@ if args.in_file_format.lower() == 'csv':
    conf_file = args.conf
    eventid=args.eventid
    dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file,log_out,infile)
+   origin = False
    if dfa.empty:
       if log_out:
          sys.stderr.write("The given input pyamp file "+infile+" was incomplete\n")
@@ -820,7 +816,7 @@ if args.in_file_format.lower() == 'csv':
 elif args.in_file_format.lower() == 'json':
    ### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
    if os.path.exists(args.in_file_name):
-      json_in=pandas.read_json(args.in_file_name)
+      json_in=pd.read_json(args.in_file_name)
       dfa,config,origin = json_pyml_load(json_in)
       eventid=0
       if dfa.empty or not config or not origin:
@@ -890,7 +886,7 @@ else:
    sys.exit()
 
 if args.clipped_info:
-   clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
+   clip=pd.read_csv(args.clipped_info,sep=';',index_col=False)
 
 cmp_keys=set()
 components_N={}
@@ -900,22 +896,20 @@ mcalc=True
 
 if args.dbona_corr:
    try:
-      dbcorr=pandas.read_csv(args.dbona_corr,sep=';')
+      dbcorr=pd.read_csv(args.dbona_corr,sep=';')
    except:
       log_out.write("File "+args.dbona_corr+" not found\n")
       sys.exit()
 else:
    dbcorr=False
 
-
-start_time = time.perf_counter()
 km=1000.
 unit=1000 # pyamp units
 if args.in_file_format == 'json':
    unit=1 #db units
 
 # 1. Pulizia e calcolo distanze spaziali (tutto vettoriale con ObsPy + Numpy)
-dfa_valid = process_amplitudes_vectorized(dfa, origin, unit, max_lowcorner, delta_corner)
+dfa_valid, met = process_amplitudes_vectorized(dfa, origin, unit, max_lowcorner, delta_corner)
 
 # 2. Calcolo Magnitudo (H&B, Di Bona) e Merge Correzioni (tutto vettoriale Pandas)
 dfa_processed = apply_magnitudes_and_group(dfa_valid, dbcorr, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb, when_no_stcorr_db)
@@ -956,7 +950,7 @@ if len(mean_hb_ml_sta) == 0:
 else:
    #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    mean_ml = list(list(zip(*mean_hb_ml_sta))[1])
-   mean_ml_sta = np_asarray(list(list(zip(*mean_hb_ml_sta))[0]), dtype=object)
+   mean_ml_sta = np.asarray(list(list(zip(*mean_hb_ml_sta))[0]), dtype=object)
    ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    if ma_mlh:
       mlhb = True
@@ -991,7 +985,7 @@ if len(mean_db_ml_sta) == 0:
 else:
    #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
    mean_ml = list(list(zip(*mean_db_ml_sta))[1])
-   mean_ml_sta = np_asarray(list(list(zip(*mean_db_ml_sta))[0]), dtype=object)
+   mean_ml_sta = np.asarray(list(list(zip(*mean_db_ml_sta))[0]), dtype=object)
    ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
    if ma_mld:
       mldb = True
