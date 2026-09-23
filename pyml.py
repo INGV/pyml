@@ -375,23 +375,23 @@ def char_quality(nu, d, m, r):
     return ''.join((q1, q2))
 
 
-def standard_pyml_load(infile_val, conf_file_val, log_out_val):
+def standard_pyml_load(infile_val, conf_file_val):
     if os.path.exists(conf_file_val) and os.path.getsize(conf_file_val) > 0:
         paramfile = conf_file_val
     else:
         sys.stderr.write(f"Config file {conf_file_val} not existing or empty\n\n")
         sys.exit(2)
 
-    confObj = cp.ConfigParser()
-    confObj.read(paramfile)
+    conf_obj = cp.ConfigParser()
+    conf_obj.read(paramfile)
     df_amp = pd.read_csv(infile_val, sep=';', index_col=False)
     df_amp.columns = df_amp.columns.str.lower()
 
-    pre_params = get_config_dictionary(confObj, 'preconditions')
+    pre_params = get_config_dictionary(conf_obj, 'preconditions')
     theo_p_val = eval(pre_params['theoretical_p'])
     theo_s_val = eval(pre_params['theoretical_s'])
 
-    sta_params = get_config_dictionary(confObj, 'station_magnitude')
+    sta_params = get_config_dictionary(conf_obj, 'station_magnitude')
     mag_mean_type_val = eval(sta_params['mag_mean_type'])
     amp_mean_type_val = eval(sta_params['amp_mean_type']) if mag_mean_type_val == 'meanamp' else None
     delta_peaks_val = float(sta_params['delta_peaks'])
@@ -400,7 +400,7 @@ def standard_pyml_load(infile_val, conf_file_val, log_out_val):
     when_no_stcorr_hb_val = eval(sta_params['when_no_stcorr_hb'])
     when_no_stcorr_db_val = eval(sta_params['when_no_stcorr_db'])
 
-    ev_params = get_config_dictionary(confObj, 'event_magnitude')
+    ev_params = get_config_dictionary(conf_obj, 'event_magnitude')
     mindist_val = float(ev_params['mindist'])
     maxdist_val = float(ev_params['maxdist'])
     hm_cutoff_val = eval(ev_params['hm_cutoff'])
@@ -531,8 +531,7 @@ if args.in_file_format.lower() == 'csv':
     conf_file = args.conf
     eventid = args.eventid
 
-    dfa, theo_p, theo_s, delta_peaks, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb, when_no_stcorr_db, mindist, maxdist, hm_cutoff, outliers_max_it, outliers_red_stop, outliers_nstd, outliers_cutoff, mag_mean_type, amp_mean_type = standard_pyml_load(
-        infile, conf_file, log_out)
+    dfa, theo_p, theo_s, delta_peaks, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb, when_no_stcorr_db, mindist, maxdist, hm_cutoff, outliers_max_it, outliers_red_stop, outliers_nstd, outliers_cutoff, mag_mean_type, amp_mean_type = standard_pyml_load(infile, conf_file)
     origin = False
     if dfa.empty:
         gresp['status'] = "422"
