@@ -645,7 +645,7 @@ def json_response_structure():
                          "ep_distance_km": null,
                          "ep_distance_delta": null,
                          "orig_distance": null,
-                         "azimuth": null,
+                         "azimuth": None,
                          "hb": {
                              "ml": null,
                              "w": null 
@@ -940,20 +940,22 @@ for index, row in dfa.iterrows():
     components_key='_'.join((str(net),str(sta),str(loc),str(cha[0:2])))
     cmp_keys.add(components_key)
 
+    # A precomputed distance does not imply that an azimuth was calculated.
+    epi_azimuth = None
     try:
         hypo_dist = row['ipodistance(km)']
         epi_dist_km = row['epidistance(km)']
-        epi_dist_deg = False
+        epi_dist_deg = None
     except:
         #calcolo le distanze
         evla=float(origin['lat'])
         evlo=float(origin['lon'])
         evdp=float(origin['depth'])
-        if not stla or not stlo:
+        if stla is False or stlo is False:
            epi_dist_km = False
            epi_dist_deg = False
            hypo_dist = False
-           epi_azimuth = False
+           epi_azimuth = None
         else:
            geo_dict = geod.Inverse(evla,evlo,stla,stlo)
            #distmeters = geo_dict['s12']
@@ -995,12 +997,14 @@ for index, row in dfa.iterrows():
     else:
        ml[1] = False
 
+    # Preserve missing elevation separately from the valid sea-level value 0.
+    station_elevation_m = None if stel is False else stel*km
     if cha[2] == 'N':
-       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,stel*km,epi_azimuth]
+       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,station_elevation_m,epi_azimuth]
     elif cha[2] == 'E':
-       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,stel*km,epi_azimuth]
+       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,station_elevation_m,epi_azimuth]
     elif cha[2] == 'Z':
-       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,stel*km,epi_azimuth]
+       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,station_elevation_m,epi_azimuth]
     else:
        if log_out:
           log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
@@ -1207,14 +1211,13 @@ for key in components_N:
             jstmag["ep_distance_km"] = components_N[key][2]
             jstmag["ep_distance_delta"] = components_N[key][3]
             jstmag["orig_distance"] = components_N[key][4]
-            if components_N[key][9]:
+            if components_N[key][9] is not False:
                jstmag["lat"] = components_N[key][9]
-            if components_N[key][10]:
+            if components_N[key][10] is not False:
                jstmag["lon"] = components_N[key][10]
-            if components_N[key][11]:
+            if components_N[key][11] is not None:
                jstmag["elev"] = components_N[key][11]
-            if components_N[key][12]:
-               jstmag["azimuth"] = components_N[key][12]
+            jstmag["azimuth"] = components_N[key][12]
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": float(channels_dictionary[key][0][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": float(channels_dictionary[key][0][3])}
@@ -1228,7 +1231,7 @@ for key in components_N:
             #logmch['status'] = 'ok'
             #logmch['level'] = 'channel'
             #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E', "extended": ''}
-            if components_N[key][9] and components_N[key][10] and components_N[key][11]:
+            if all(value is not False and value is not None for value in components_N[key][9:12]):
                resp["stationmagnitudes"].append(jstmag)
             #resp["log"].append(logmch)
     jstmag = copy.deepcopy(jstationmagnitude)
@@ -1248,14 +1251,13 @@ for key in components_N:
             jstmag["ep_distance_km"] = components_E[key][2]
             jstmag["ep_distance_delta"] = components_E[key][3]
             jstmag["orig_distance"] = components_E[key][4]
-            if components_E[key][9]:
+            if components_E[key][9] is not False:
                jstmag["lat"] = components_E[key][9]
-            if components_E[key][10]:
+            if components_E[key][10] is not False:
                jstmag["lon"] = components_E[key][10]
-            if components_E[key][11]:
+            if components_E[key][11] is not None:
                jstmag["elev"] = components_E[key][11]
-            if components_E[key][12]:
-               jstmag["azimuth"] = components_E[key][12]
+            jstmag["azimuth"] = components_E[key][12]
             if channels_dictionary[key]:
                jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": float(channels_dictionary[key][1][1])}
                jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": float(channels_dictionary[key][1][3])}
@@ -1270,7 +1272,7 @@ for key in components_N:
             #logmch['status'] = 'ok'
             #logmch['level'] = 'channel'
             #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N', "extended": ''}
-            if components_E[key][9] and components_E[key][10] and components_E[key][11]:
+            if all(value is not False and value is not None for value in components_E[key][9:12]):
                resp["stationmagnitudes"].append(jstmag)
             #resp["log"].append(logmch)
             #resp["stationmagnitudes"].append(jstmag)

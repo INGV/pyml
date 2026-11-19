@@ -37,6 +37,27 @@ To run the container, use the command below; the `-v` option is used to "mount" 
 docker run --rm -v $(pwd)/examples/input:/opt/data ingv/pyml --in_file_name /opt/data/eventid_28745631.json --in_file_format json --out_format json
 ```
 
+## Station metadata
+
+Station azimuths are measured from the station toward the event. A bearing of
+`0.0` degrees is valid and is returned as a JSON number on both horizontal
+components. An azimuth or angular distance that was not calculated is returned
+as JSON `null`. Zero latitude, longitude and elevation are valid metadata;
+stations with missing coordinates or elevation are omitted from the
+`stationmagnitudes` list.
+
+## Tests
+
+With the Python dependencies listed in `Dockerfile` installed, run:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+The tests run the complete CLI in temporary directories. They cover the CPTP
+zero-azimuth regression reported in REI issue #684, nonzero bearings, sea-level
+and zero-coordinate stations, missing metadata, and unchanged magnitude results.
+
 ## Contribute
 Thanks to your contributions!
 
