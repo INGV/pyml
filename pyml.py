@@ -94,10 +94,18 @@ def process_amplitudes_vectorized(df_amp, ev_origin, unit_val):
     valid_mask = (df_amp['net'] != False) & (df_amp['sta'] != False) & (df_amp['cha'] != False)
     df_valid = df_amp[valid_mask].copy()
 
+    # Missing metadata stays distinct from valid zero coordinates and elevation.
+    for field in ('lat', 'lon', 'elev'):
+        df_valid[field] = pd.to_numeric(
+            df_valid.get(field, pd.Series(index=df_valid.index, dtype=float)), errors='coerce'
+        )
+
     if 'ipodistance(km)' in df_valid.columns and 'epidistance(km)' in df_valid.columns:
         df_valid['epi_dist_km'] = df_valid['epidistance(km)'].astype(np.float64)
         df_valid['hypo_dist'] = df_valid['ipodistance(km)'].astype(np.float64)
-        df_valid['epi_azimuth'] = 0.0
+        # Precomputed distances do not imply that a bearing was calculated.
+        df_valid['epi_azimuth'] = None
+        df_valid['epi_dist_deg'] = None
     else:
         if ev_origin and 'lat' in ev_origin and 'lon' in ev_origin:
             valid_coord_mask = df_valid['lat'].notna() & df_valid['lon'].notna()
@@ -109,15 +117,16 @@ def process_amplitudes_vectorized(df_amp, ev_origin, unit_val):
 
             def calc_dist_az(stla, stlo):
                 distmeters, azi, _ = gps2dist_azimuth(stla, stlo, evla, evlo)
-                return distmeters / 1000.0, azi
+                distdegrees = Geodesic.WGS84.Inverse(evla, evlo, stla, stlo)['a12']
+                return distmeters / 1000.0, azi, distdegrees
 
-            vec_dist_az = np.vectorize(calc_dist_az, otypes=[np.float64, np.float64])
-            df_valid['epi_dist_km'], df_valid['epi_azimuth'] = vec_dist_az(
+            vec_dist_az = np.vectorize(calc_dist_az, otypes=[np.float64, np.float64, np.float64])
+            df_valid['epi_dist_km'], df_valid['epi_azimuth'], df_valid['epi_dist_deg'] = vec_dist_az(
                 df_valid['lat'].to_numpy(),
                 df_valid['lon'].to_numpy()
             )
 
-            df_valid['stel_km'] = df_valid['elev'].astype(np.float64) / 1000.0
+            df_valid['stel_km'] = df_valid['elev'].fillna(0.0) / 1000.0
             df_valid['hypo_dist'] = np.sqrt(
                 np.square(df_valid['epi_dist_km']) + np.square(evdp + df_valid['stel_km'])
             )
@@ -149,8 +158,8 @@ def apply_magnitudes_and_group(df_valid, db_corr, use_stcorr_h, use_stcorr_d, wh
     """
     if db_corr is not False and not db_corr.empty:
         df_valid = pd.merge(df_valid, db_corr[['sta', 'c']], on='sta', how='left')
-        df_valid.rename(columns={'c': 's_dibona'}, inplace=True)
-        df_valid['s_dibona'] = df_valid['s_dibona'].fillna(False)
+        df_valid = df_valid.rename(columns={'c': 's_dibona'})
+        df_valid['s_dibona'] = df_valid['s_dibona'].fillna(0.0)
     else:
         df_valid['s_dibona'] = False
 
@@ -462,7 +471,7 @@ def json_response_structure():
         "net": null, "sta": null, "cha": null, "loc": null,
         "amp1": null, "time1": null, "amp2": null, "time2": null,
         "ep_distance_km": null, "ep_distance_delta": null,
-        "orig_distance": null, "azimuth": null,
+        "orig_distance": null, "azimuth": None,
         "hb": {"ml": null, "w": null},
         "db": {"ml": null, "w": null}
     }
@@ -700,6 +709,8 @@ if not df_stations.empty:
         wdb = w_db_dict.get(st_key, 0.0)
 
         for ori in ['N', 'E']:
+            if any(pd.isna(row.loc[(field, ori)]) for field in ('lat', 'lon', 'elev')):
+                continue
             jstmag: dict = copy.deepcopy(jstationmagnitude)
             jstmag.update({
                 "net": n_net, "sta": n_sta, "cha": f"{n_cha}{ori}",
@@ -707,8 +718,9 @@ if not df_stations.empty:
                 "amp1": row.loc[('minamp', ori)], "time1": row.loc[('time_minamp', ori)],
                 "amp2": row.loc[('maxamp', ori)], "time2": row.loc[('time_maxamp', ori)],
                 "ep_distance_km": row.loc[('epi_dist_km', ori)], "orig_distance": row.loc[('hypo_dist', ori)],
+                "ep_distance_delta": None if pd.isna(row.loc[('epi_dist_deg', ori)]) else row.loc[('epi_dist_deg', ori)],
                 "lat": row.loc[('lat', ori)], "lon": row.loc[('lon', ori)], "elev": row.loc[('elev', ori)],
-                "azimuth": row.loc[('epi_azimuth', ori)],
+                "azimuth": None if pd.isna(row.loc[('epi_azimuth', ori)]) else row.loc[('epi_azimuth', ori)],
                 "hb": {"ml": row.loc[('ml_hb', ori)] if not pd.isna(row.loc[('ml_hb', ori)]) else None,"w": float(whb)},
                 "db": {"ml": row.loc[('ml_db', ori)] if not pd.isna(row.loc[('ml_db', ori)]) else None, "w": float(wdb)}
             })
