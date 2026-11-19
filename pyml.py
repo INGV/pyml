@@ -1,98 +1,58 @@
-# Authors: Raffaele Di Stefano (raffaele.distefano@ingv.it), Barbara Castello (barbara.castello@ingv.it)
+# Authors:
+#   Raffaele Di Stefano (raffaele.distefano@ingv.it),
+#   Barbara Castello (barbara.castello@ingv.it)
+#   Coding of present version powered by Gemini 3.1 Pro
 # Aknowledgements: Valentino Lauciani (valentino.lauciani@ingv.it) and Andrea Bono (andrea.bono@ingv.it) - adaptation to the monitoring system
 # Licence: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
-# 
-# Input files:
-# - option 1) channels' amplitudes csv file, stations corrections csv files, pyml.conf
-# - option 2) channels' amplitudes json file with conf included, stations corrections csv files
-# Operations:
-# - calculates channel ML on all the three components with several Attenuation Laws
-# - calculates station ML on all the stations either as a mean of channel's one or as ML of the mean amplitude
-# - calculates event ML for all the Attenuation Laws with different possible statistical approaches
-#    
-# Details: Amplitude usage
-#    Two different approaches are followed to calculate the station ML:
-#    - the mean of the maximum amplitudes N and E is used in the attenuation law to get the station ML (mean can be aritmetic or geometric)
-#    - the mean of the N and E ML is performed to give the station ML (mean can be aritmetic or geometric)
-# Attenuation Law
-#    PyML implemets two different attenuation laws for the ML calculation:
-#    - INGV Hutton & Boore which is mutuated by the one formerly used at USGS for the 
-#      adapted to the Italian region with no stations corrections
-#    - M. Di Bona attenuation law calculated specifically for the Italian region
-#      with stations corrections at 400 stations (Di Bona 1-199 and Mele-Quintiliani 200-400)
-#    - Lolli Gssperini and Mele double attenuation law is coming soon
-#
-# Mean ML Value and Standard deviation calculation
-#    Two alternative, both iterative, approaches can be used 
-#    Both methods start from the median and not from the mean for robustness, then they diverge from each other
-#    1) Strict Huber Mean / Outliers removal (weighting function is not applied or it can considered to be 0 for outlier and 1 for the rest)
-#       Parameters are taken from the .conf file or from the json input:
-#       - outliers_nstd: how many time (outliers_nstd*standarddev) must be used to cut out the outliers
-#       - outliers_cutoff: a lower limit to the outliers_nstd*standarddev value
-#       - outliers_red_stop: stops iterations when abs(mean_old-updated_mean)) is lower than outliers_red_stop
-#       - outliers_max_it: after this value iterations it stops iterating anyway (no convergence); this value is also used in the other method
-#    2) Weighted Huber Mean
-#       after the preliminary mean calculation this approach calculates it's own weighted mean value and standard deviation
-#       Parameters are taken from the .conf file or from the json input:
-#       - outliers_max_it: same as the other
-#       - hm_cutoff: this is the corner of the downweighting function; whatever is inside +/- hm_cutoff from the (updated) weighted mean has weight 1.0,
-#         the rest is downweighted as hm_cutoff/(distance_from_the_mean)
-#    In both cases stations with hypocentral distance lower than mindist (tipically 10km) and higher than maxdist (tipically 600) are excluded
 
-import argparse,sys,os,glob,copy,pwd,pathlib,itertools,getpass,socket
+# --- Libreria Standard Python ---
+import argparse
+import copy
 import decimal
-
-from geographiclib.geodesic import Geodesic
-import pandas
-import time
 import json
+import os
+import socket
+import sys
+import logging
+from datetime import datetime
+import configparser as cp
+from math import log2
 
-# Imports from obpsy
-from obspy import read
-from obspy.geodetics.base import gps2dist_azimuth as distaz
+# --- Librerie Scientifiche e di Analisi Dati ---
+import numpy as np
+import pandas as pd
 from scipy.stats import median_abs_deviation
 
-from numpy import where as np_where
-from numpy import sum as np_sum
-from numpy import square as np_square
-from numpy import errstate as np_errstate
-from numpy import median as np_median
-from numpy import ones as np_ones
-from numpy import array as np_array
-from numpy import asarray as np_asarray
+# --- Librerie Geodetiche e Sismologiche ---
+from geographiclib.geodesic import Geodesic
+from obspy.geodetics.base import gps2dist_azimuth
 
-from datetime import datetime
-
-from math import sqrt as msqrt, log10 as mlog10, pow as mpow, log2 as mlog2
 
 class MyParser(argparse.ArgumentParser):
     def error(self, message):
-        sys.stderr.write('error: %s\n' % message)
+        sys.stderr.write(f'error: {message}\n')
         self.print_help()
         sys.exit(2)
 
-def parseArguments():
-        parser=MyParser()	
-        parser.add_argument('--in_file_name',       default=None,          help='Name (and path) of input amplitudes file')
-        parser.add_argument('--in_file_format',     default='json',        help='options are json (data and config in one single file) or csv (pyamp format): this latter needs also the --conf argument')
-        parser.add_argument('--conf',               default=None,          help='A file containing sections and related parameters (used only with --csv)')
-        parser.add_argument('--out_format',         default='json',        help='options are json or txt')
-        parser.add_argument('--eventid',            default='0',           help='Unique identifier of the event (only used with --csv_in and --conf)')
-        parser.add_argument('--dbona_corr',         default='dbcor.csv',   help='Input file with DiBona Stations corrections')
-        parser.add_argument('--clipped_info',help='Input file with information on clipped channels')
-        if len(sys.argv)==1:
-            parser.print_help()
-            sys.exit(1)
-        args=parser.parse_args()
-        return args
 
-# Depending on the python version the configparser has different names so ... try
-try:
-    import ConfigParser as cp
-except ImportError:
-    import configparser as cp
+def parse_arguments():
+    parser = MyParser()
+    parser.add_argument('--in_file_name', default=None, help='Name (and path) of input amplitudes file')
+    parser.add_argument('--in_file_format', default='json',
+                        help='options are json (data and config in one single file) or csv (pyamp format): this latter needs also the --conf argument')
+    parser.add_argument('--conf', default=None,
+                        help='A file containing sections and related parameters (used only with --csv)')
+    parser.add_argument('--out_format', default='json', help='options are json or txt')
+    parser.add_argument('--eventid', default='0',
+                        help='Unique identifier of the event (only used with --csv_in and --conf)')
+    parser.add_argument('--dbona_corr', default='dbcor.csv', help='Input file with DiBona Stations corrections')
+    parser.add_argument('--clipped_info', help='Input file with information on clipped channels')
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+    return parser.parse_args()
 
-# Build a dictionary from config file section
+
 def get_config_dictionary(cfg, section):
     dict1 = {}
     options = cfg.options(section)
@@ -100,1192 +60,684 @@ def get_config_dictionary(cfg, section):
         try:
             dict1[option] = cfg.get(section, option)
             if dict1[option] == -1:
-                sys.stderr.write(("skip: %s" % option))
-        except:
-            if log_out:
-               log_out.write("exception on %s!\n" % option)
+                sys.stderr.write(f"skip: {option}")
+        except (cp.NoOptionError, cp.NoSectionError) as ex:
+            sys.stderr.write(f"Exception on {option}! {ex}\n")
             dict1[option] = None
     return dict1
 
-def huttonboore(a,d,s,uc):
-    # if uc (use_stcorr_hb) is True s is set to its entrance value and if this value is not False it is set to its value
-    # if uc (use_stcorr_hb) is True s is set to its entrance value and if this value is False it is set to ZERO
-    # if uc (use_stcorr_hb) is False s entrance value is overwritten and it is set to ZERO and then in the second condition it is ZERO (so it is True because it has a value) and remains ZERO
-    s = 0 if not uc else s # station correction is set to 0 if use_stcorr_hb is False
-    s = 0 if not s else s # station correction is set to 0 if it is False
-    try:
-       m = mlog10(a) + 1.110*mlog10(d / 100.) + 0.00189*(d - 100.) + 3.0 + s # Hutton & Boore with s added but not confirmed if it is correct
-    except:
-       m = False
-    return m
 
-def dibona(a,d,s,uc):
-    # if uc (use_stcorr_db) is True s is set to its entrance value and if this value is not False it is set to its value
-    # if uc (use_stcorr_db) is True s is set to its entrance value and if this value is False it is set to ZERO
-    # if uc (use_stcorr_db) is False s entrance value is overwritten and it is set to ZERO and then in the second condition it is ZERO (so it is True because it has a value) and remains ZERO
-    s = 0 if not uc else s # station correction is set to 0 if use_stcorr_hb is False
-    s = 0 if not s else s # station correction is set to 0 if it is False
-    try:
-       m = mlog10(a) + 1.667*mlog10(d / 100.) + 0.001736*(d - 100.) + 3.0 + s # Massimo Di Bona
-    except:
-       m = False
-    return m
+def process_amplitudes_vectorized(df_amp, ev_origin, unit_val):
+    """
+    Pulisce i dati, gestisce le distanze (sia precalcolate CSV che da calcolare via Obspy/JSON)
+    ed estrae il metodo operativo in logica Pandas.
+    """
+    df_amp['net'] = df_amp.get('net', pd.Series(dtype=object)).fillna(False)
+    df_amp['sta'] = df_amp.get('sta', pd.Series(dtype=object)).fillna(False)
+    df_amp['loc'] = df_amp.get('loc', pd.Series(dtype=object)).fillna('--')
+    df_amp['cha'] = df_amp.get('cha', pd.Series(dtype=object)).fillna(False)
+
+    method_type = str(df_amp['method'].iloc[0]) if 'method' in df_amp.columns else 'ingv'
+
+    minamp_col = 'minamp(m)' if 'minamp(m)' in df_amp.columns else 'amp1'
+    maxamp_col = 'maxamp(m)' if 'maxamp(m)' in df_amp.columns else 'amp2'
+    time_min_col = 'minamptime' if 'minamptime' in df_amp.columns else 'time1'
+    time_max_col = 'maxamptime' if 'maxamptime' in df_amp.columns else 'time2'
+
+    df_amp['minamp'] = df_amp[minamp_col].astype(np.float64) * unit_val
+    df_amp['maxamp'] = df_amp[maxamp_col].astype(np.float64) * unit_val
+    df_amp['amp_calc'] = np.abs(df_amp['maxamp'] - df_amp['minamp']) / 2.0
+
+    df_amp['time_minamp'] = df_amp[time_min_col]
+    df_amp['time_maxamp'] = df_amp[time_max_col]
+
+    valid_mask = (df_amp['net'] != False) & (df_amp['sta'] != False) & (df_amp['cha'] != False)
+    df_valid = df_amp[valid_mask].copy()
+
+    # Missing metadata stays distinct from valid zero coordinates and elevation.
+    for field in ('lat', 'lon', 'elev'):
+        df_valid[field] = pd.to_numeric(
+            df_valid.get(field, pd.Series(index=df_valid.index, dtype=float)), errors='coerce'
+        )
+
+    if 'ipodistance(km)' in df_valid.columns and 'epidistance(km)' in df_valid.columns:
+        df_valid['epi_dist_km'] = df_valid['epidistance(km)'].astype(np.float64)
+        df_valid['hypo_dist'] = df_valid['ipodistance(km)'].astype(np.float64)
+        # Precomputed distances do not imply that a bearing was calculated.
+        df_valid['epi_azimuth'] = None
+        df_valid['epi_dist_deg'] = None
+    else:
+        if ev_origin and 'lat' in ev_origin and 'lon' in ev_origin:
+            valid_coord_mask = df_valid['lat'].notna() & df_valid['lon'].notna()
+            df_valid = df_valid[valid_coord_mask].copy()
+
+            evla = float(ev_origin['lat'])
+            evlo = float(ev_origin['lon'])
+            evdp = float(ev_origin['depth'])
+
+            def calc_dist_az(stla, stlo):
+                distmeters, azi, _ = gps2dist_azimuth(stla, stlo, evla, evlo)
+                distdegrees = Geodesic.WGS84.Inverse(evla, evlo, stla, stlo)['a12']
+                return distmeters / 1000.0, azi, distdegrees
+
+            vec_dist_az = np.vectorize(calc_dist_az, otypes=[np.float64, np.float64, np.float64])
+            df_valid['epi_dist_km'], df_valid['epi_azimuth'], df_valid['epi_dist_deg'] = vec_dist_az(
+                df_valid['lat'].to_numpy(),
+                df_valid['lon'].to_numpy()
+            )
+
+            df_valid['stel_km'] = df_valid['elev'].fillna(0.0) / 1000.0
+            df_valid['hypo_dist'] = np.sqrt(
+                np.square(df_valid['epi_dist_km']) + np.square(evdp + df_valid['stel_km'])
+            )
+        else:
+            sys.stderr.write("Dati di origine mancanti per il calcolo delle distanze.\n")
+            sys.exit(1)
+
+    return df_valid, method_type
 
 
-def create_sets(keys,cmpn_original,cmpe_original,mtd,mid,mad,dp,mty,whstc,stc,mmt,amt,logsms,jlog_stamag,jlog_stamag_cha):
-    # mtd is the peakmethod
-    # mty is the huttonboore 0, dibona 1
-    # a channel cmpn is [ml,amp,tr.dist,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp]
-    #   where ml is a list of two: [ml_hutton,ml_dibona]
-    # mmt is the mag_mean_type parameter
-    #     'meanmag"--> only the mean of the channels's ML is computed
-    #     'meanamp"--> only the ML based on the mean of the channels's amplitudes is computed
-    #     in the second case, amt is evaluated:
-    #    'geo' --> the geometrical mean is computed
-    #     'ari' --> the artihmetic mean is computed
-    ml_set=[]
-    mtytxt='HuttonBoore' if mty==0 else 'DiBona'
-    midi = 99999.0 # Minimum distance is needed and here below calculated to be used in the mag quality definition
-    cmpe = cmpe_original.copy()
-    cmpn = cmpn_original.copy()
-    for k in keys:
-        log_condition=False
-        n,s,l,c = k.split('_')
-        kk=k+'_'+mtd
-        logsm = copy.deepcopy(jlog_stamag)
-        logsm['net'],logsm['sta'],logsm['loc'],logsm['band_inst'] = [n,s,l,c]
-        #logsm['loc'] = "--" if logsm['loc'] == "None" else logsm['loc']
-        why_missing_channel=""
-        if kk in cmpe:
-           if not cmpe[kk][1][1] or not cmpe[kk][1][0]:
-              why_missing_channel="maxamp missing" if not cmpe[kk][1][1] else "minamp missing"
-              remove_key = cmpe.pop(kk, None)
-        if kk in cmpn:
-           if not cmpn[kk][1][1] or not cmpn[kk][1][0]:
-              why_missing_channel="maxamp missing" if not cmpn[kk][1][1] else "minamp missing"
-              remove_key = cmpn.pop(kk, None)
-        if kk in cmpn and kk in cmpe: # if both components are present in the set
-           if not cmpn[kk][2] or not cmpe[kk][2]:
-              epidist = False
-              ipodist = False
-              if log_out:
-                 log_out.write(' '.join(("Station skipped due to stations coordinates missing: ",str(k),str(ipodist),"\n")))
-              logsm['status'] = "critical"
-              logsm['summary'] = "Station skipped due to stations coordinates missing"
-              logsm['extended'] = mtytxt
-              logsms.append(logsm)
-              continue
-           epidist = (cmpn[kk][2] + cmpe[kk][2])/2 # epicentral distance
-           ipodist = (cmpn[kk][4] + cmpe[kk][4])/2 # ipocentral distance
-           amp_e = abs(cmpe[kk][1][1]-cmpe[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
-           amp_n = abs(cmpn[kk][1][1]-cmpn[kk][1][0])/2 # now both the minamp and maxamp values are reported in the channels arrays so amplitude richter must be calculated here
-           if ipodist >= mid and ipodist <= mad: # if ipocentral distance is within the accepted range we proceed
-              if mtd != 'free' or (mtd == 'free' and abs(cmpn[kk][7]-cmpn[kk][6]) <= dp and abs(cmpe[kk][7]-cmpe[kk][6]) <= dp): # if the method is not free the deltapeak has no meaning orherwise it is evaluated
-                 #Mean of channel magnitudes is calculated
-                 if mmt == 'meanmag' and cmpn[kk][0][mty] and cmpe[kk][0][mty]:
-                    mm = (cmpn[kk][0][mty] + cmpe[kk][0][mty])/2
-                 elif mmt == 'meanamp' and (not stc or (cmpn[kk][5][mty] and cmpe[kk][5][mty]) or whstc): 
-                 # Magnitudes of Mean channel amplitudes is calculated if 
-                    if amt == 'ari':
-                       mean_amp = (amp_n + amp_e)/2 # Artimetic mean
-                    elif amt == 'geo':
-                       mean_amp = msqrt(amp_n * amp_e) # Geometric mean that is the correct one according to Di Bona
-                    corr = (cmpn[kk][5][mty] + cmpe[kk][5][mty])/2 if cmpn[kk][5][mty] and cmpe[kk][5][mty] else False
-                    if mty == 0:
-                       mm = huttonboore(mean_amp,ipodist,corr,stc)
-                       mtytxt = 'HuttonBoore'
-                    if mty == 1:
-                       mm = dibona(mean_amp,ipodist,corr,stc)
-                       mtytxt = 'DiBona'
-                 ml_set.append([kk,mm])
-                 midi = epidist if epidist < midi else midi
-              else:
-                 if log_out:
-                    log_out.write(' '.join(("Station skipped due to time distance between min and max amp larger than",str(dp),":",str(kk),str(abs(cmpn[kk][7]-cmpn[kk][6])),"\n")))
-                 logsm['status'] = 'warning'
-                 logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station skipped due to time distance between min and max amp larger than",str(dp)))
-                 logsm['extended'] = ' '.join(("Time distance is",str(abs(cmpn[kk][7]-cmpn[kk][6])),"s"))
-                 log_condition=True
-                 #logsms.append(logsm)
-           else:
-              if log_out:
-                 log_out.write(' '.join(("Station skipped due to ipodist: ",str(k),str(ipodist),"\n")))
-              logsm['status'] = 'warning' 
-              logsm['summary'] = ' '.join(("In ML ",mtytxt,"Station",str(kk),"skipped due to ipodist"))
-              logsm['extended'] = ' '.join(("Distance is",str(ipodist),"km"))
-              log_condition=True
-              #logsms.append(logsm)
-        elif kk not in cmpn or kk not in cmpe:
-           if log_out:
-              log_out.write(' '.join(("Station skipped due to missing channel",str(kk),'\n')))
-           logsm['status'] = 'critical'
-           logsm['summary'] = 'Station skipped due to missing channel'
-           logsm['extended'] = 'ML ' + mtytxt
-           logsmc = copy.deepcopy(jlog_stamag_cha)
-           if kk not in cmpn:
-              logsmc['orientation'] = 'N'
-              logsmc['status'] = 'critical' 
-              logsmc['summary'] = 'missing' 
-              logsmc['extended'] = why_missing_channel
-           else:
-              logsmc['orientation'] = 'N'
-              logsmc['status'] = 'ok' 
-           logsm['channels'].append(logsmc)
-           logsmc = copy.deepcopy(jlog_stamag_cha)
-           if kk not in cmpe:
-              logsmc['orientation'] = 'E'
-              logsmc['status'] = 'critical' 
-              logsmc['summary'] = 'missing' 
-              logsmc['extended'] = why_missing_channel
-           else:
-              logsmc['orientation'] = 'E'
-              logsmc['status'] = 'ok' 
-           logsm['channels'].append(logsmc)
-           log_condition=True
-        if log_condition:
-           logsms.append(logsm)
-    return ml_set,midi,logsms
+def calc_huttonboore_vec(a, d, s, uc):
+    s_arr = np.where(uc, s, 0.0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        mag_val = np.where(a > 0, np.log10(a) + 1.110 * np.log10(d / 100.) + 0.00189 * (d - 100.) + 3.0 + s_arr, np.nan)
+    return mag_val
 
-#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-# Calculating the weighted standard deviation
-#         from SUBROUTINE MEDIA_HUBER Programmed on 1 september 2003 by Franco Mele (INGV)
-# Formula is: 
-#           ___N
-#           \                    2
-#            \      Wi(Xi - Xmed)
-#            /
-#           /__i=1
-# SQRT(  ------------------------------------- )
-#
-#              N'-1     __N
-#              ----- (  \     Wi )
-#                N'     /_i=1
-#
-#<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-def wstd(v,wm,wf):
-    eps2=5.0e-6
+
+def calc_dibona_vec(a, d, s, uc):
+    s_arr = np.where(uc, s, 0.0)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        mag_val = np.where(a > 0, np.log10(a) + 1.667 * np.log10(d / 100.) + 0.001736 * (d - 100.) + 3.0 + s_arr,
+                           np.nan)
+    return mag_val
+
+
+def apply_magnitudes_and_group(df_valid, db_corr, use_stcorr_h, use_stcorr_d, when_no_stcorr_h, when_no_stcorr_d):
+    """
+    Calcola ML in vettoriale e prepara i dati per l'aggregazione di stazione.
+    """
+    if db_corr is not False and not db_corr.empty:
+        df_valid = pd.merge(df_valid, db_corr[['sta', 'c']], on='sta', how='left')
+        df_valid = df_valid.rename(columns={'c': 's_dibona'})
+        df_valid['s_dibona'] = df_valid['s_dibona'].fillna(0.0)
+    else:
+        df_valid['s_dibona'] = False
+
+    df_valid['s_hutton'] = False
+
+    calc_hb_mask = (df_valid['s_hutton'] != False) | ((df_valid['s_hutton'] == False) & when_no_stcorr_h)
+    calc_db_mask = (df_valid['s_dibona'] != False) | ((df_valid['s_dibona'] == False) & when_no_stcorr_d)
+
+    df_valid['ml_hb'] = np.nan
+    df_valid.loc[calc_hb_mask, 'ml_hb'] = calc_huttonboore_vec(
+        df_valid.loc[calc_hb_mask, 'amp_calc'].to_numpy(),
+        df_valid.loc[calc_hb_mask, 'hypo_dist'].to_numpy(),
+        df_valid.loc[calc_hb_mask, 's_hutton'].to_numpy(),
+        use_stcorr_h
+    )
+
+    df_valid['ml_db'] = np.nan
+    df_valid.loc[calc_db_mask, 'ml_db'] = calc_dibona_vec(
+        df_valid.loc[calc_db_mask, 'amp_calc'].to_numpy(),
+        df_valid.loc[calc_db_mask, 'hypo_dist'].to_numpy(),
+        df_valid.loc[calc_db_mask, 's_dibona'].to_numpy(),
+        use_stcorr_d
+    )
+
+    df_valid['cha_prefix'] = df_valid['cha'].str[0:2]
+    df_valid['components_key'] = df_valid['net'] + '_' + df_valid['sta'] + '_' + df_valid['loc'] + '_' + df_valid[
+        'cha_prefix']
+    df_valid['orientation'] = df_valid['cha'].str[2]
+
+    return df_valid
+
+
+def create_sets_vectorized(dfa_proc, mtd, mid, mad, dp, mty, stc, mmt, amt):
+    """
+    Usa Pandas per allineare canali N ed E, filtrare vettorialmente e calcolare la ML di stazione.
+    """
+    df_ne = dfa_proc[dfa_proc['orientation'].isin(['N', 'E'])].copy()
+
+    if df_ne.empty:
+        return [], 99999.0, []
+
+    df_p = df_ne.pivot(index='components_key', columns='orientation')
+    df_p = df_p.dropna(subset=[('amp_calc', 'N'), ('amp_calc', 'E')])
+
+    if df_p.empty:
+        return [], 99999.0, []
+
+    mean_hypo = (df_p[('hypo_dist', 'N')] + df_p[('hypo_dist', 'E')]) / 2.0
+    mean_epi = (df_p[('epi_dist_km', 'N')] + df_p[('epi_dist_km', 'E')]) / 2.0
+
+    valid_mask = (mean_hypo >= mid) & (mean_hypo <= mad)
+
+    if mtd == 'free':
+        t_max_n = pd.to_numeric(df_p[('time_maxamp', 'N')], errors='coerce')
+        t_min_n = pd.to_numeric(df_p[('time_minamp', 'N')], errors='coerce')
+        t_max_e = pd.to_numeric(df_p[('time_maxamp', 'E')], errors='coerce')
+        t_min_e = pd.to_numeric(df_p[('time_minamp', 'E')], errors='coerce')
+
+        dp_n = (t_max_n - t_min_n).abs()
+        dp_e = (t_max_e - t_min_e).abs()
+
+        valid_mask &= (dp_n <= dp) & (dp_e <= dp)
+
+    df_v = df_p[valid_mask].copy()
+    if df_v.empty:
+        return [], 99999.0, []
+
+    mty_str = 'ml_hb' if mty == 0 else 'ml_db'
+    s_str = 's_hutton' if mty == 0 else 's_dibona'
+    calc_func = calc_huttonboore_vec if mty == 0 else calc_dibona_vec
+
+    sta_ml = None
+
+    if mmt == 'meanmag':
+        sta_ml = (df_v[(mty_str, 'N')] + df_v[(mty_str, 'E')]) / 2.0
+    elif mmt == 'meanamp':
+        amp_n, amp_e = df_v[('amp_calc', 'N')], df_v[('amp_calc', 'E')]
+        mean_amp = (amp_n + amp_e) / 2.0 if amt == 'ari' else np.sqrt(amp_n * amp_e)
+
+        corr_n = pd.to_numeric(df_v[(s_str, 'N')], errors='coerce').fillna(0)
+        corr_e = pd.to_numeric(df_v[(s_str, 'E')], errors='coerce').fillna(0)
+        mean_corr = (corr_n + corr_e) / 2.0
+
+        sta_ml = calc_func(mean_amp.to_numpy(), mean_hypo[valid_mask].to_numpy(), mean_corr.to_numpy(), stc)
+
+    valid_keys = df_v.index.astype(str) + '_' + mtd
+    ml_set = [[k, m] for k, m in zip(valid_keys, sta_ml) if pd.notna(m)]
+
+    midi = mean_epi[valid_mask].min() if not mean_epi[valid_mask].empty else 99999.0
+    logsms = []
+
+    return ml_set, midi, logsms
+
+
+def wstd(v, wm, wf):
+    eps2 = 5.0e-6
     if len(v) <= 1:
-       wsd = False
-    else:
-       index_not_zero = np_where(wf > eps2)[0]
-       wf_nz = wf[index_not_zero]
-       #print("wf_nz: ",wf_nz)
-       v_nz  = v[index_not_zero]
-       wsd = np_sum(wf_nz*np_square((v_nz-wm)))
-       fac = ((len(wf_nz)-1)/len(wf_nz))*np_sum(wf_nz)
-       wsd = wsd / max(fac,eps2)
-       wsd = msqrt(max(wsd,eps2))
-    return wsd 
+        return False
+    index_not_zero = np.where(wf > eps2)[0]
+    wf_nz = wf[index_not_zero]
+    v_nz = v[index_not_zero]
+    wsd = np.sum(wf_nz * np.square((v_nz - wm)))
+    fac = ((len(wf_nz) - 1) / len(wf_nz)) * np.sum(wf_nz)
+    wsd = wsd / max(fac, eps2)
+    return np.sqrt(max(wsd, eps2))
 
-def whuber(v,w_mean,ruse,zero):
+
+def whuber(v, w_mean, ruse, zero_val):
     res = abs(v - w_mean)
-    with np_errstate(divide='ignore'):
-         w = np_where(res <= ruse,1.0,np_where(res > zero,0.0,ruse/res))
-    #print("W: ",w)
+    with np.errstate(divide='ignore'):
+        w = np.where(res <= ruse, 1.0, np.where(res > zero_val, 0.0, ruse / res))
     try:
-       w_mean = np_sum(v * w)/np_sum(w)
-    except Exception as e:
-       sys.stderr.write(("Error calculalting the Huber Mean",e))
-       w_mean = False
-    if w_mean:
-       w_std = wstd(v,w_mean,w)
-    else:
-       w_std = False
+        w_mean = np.sum(v * w) / np.sum(w)
+    except ZeroDivisionError as err:
+        sys.stderr.write(f"Error calculating the Huber Mean: {err}\n")
+        w_mean = False
+
+    w_std = wstd(v, w_mean, w) if w_mean else False
     w_std = 0.0 if not w_std else w_std
-    return w_mean,w_std,w
+    return w_mean, w_std, w
 
-def rm_outliers(v,v_w,v_flag,v_mean,v_std,times_std,co,var_stop,it_max,skip):
+
+def rm_outliers(v, v_w, v_flag, v_mean, v_std, times_std, co, skip):
     res = abs(v - v_mean)
-    #w_fake = np_ones(len(v))
-    v_mean_old = v_mean
     cut_limit = times_std * v_std if (times_std * v_std) > co else co
-    not_outlier = res  < cut_limit
+    not_outlier = res < cut_limit
     yes_outlier = res >= cut_limit
-    skip.append(list(zip(v_flag[yes_outlier],v[yes_outlier])))
-    v_w[yes_outlier]=0
-    v_w[not_outlier]=1
-    #v = v[not_outlier]
-    #v_flag = v_flag[not_outlier]
-    if len(v[not_outlier]) > 0:
-       v_std  = median_abs_deviation(v[not_outlier])
-       v_mean = np_median(v[not_outlier])
-       n_v_flag = len(v[not_outlier])
-    else:
-       v_std  = False
-       v_mean = False
-       n_v_flag = False
-    return v_mean,v_std,v_w,skip
+    skip.append(list(zip(v_flag[yes_outlier], v[yes_outlier])))
+    v_w[yes_outlier] = 0
+    v_w[not_outlier] = 1
 
-def calculate_event_ml(magnitudes,magnitudes_sta,it_max,var_stop,max_dev,out_cutoff,hm_cutoff):
-    v = np_array(magnitudes)
+    if len(v[not_outlier]) > 0:
+        v_std = median_abs_deviation(v[not_outlier])
+        v_mean = np.median(v[not_outlier])
+    else:
+        v_std = False
+        v_mean = False
+    return v_mean, v_std, v_w, skip
+
+
+def calculate_event_ml(magnitudes, magnitudes_sta, it_max, var_stop, max_dev, out_cutoff, hm_cutoff_val):
+    v = np.array(magnitudes)
     s = magnitudes_sta
-    ruse = hm_cutoff
-    # Calculate starting values from m (magnitudes) vector
-    # We here use a median and mad instead of the mean and std as stating values because they are more robust
-    # Names are taken from Huber Mean routine by Franco Mele for coherence
-    xmd = np_median(v)
-    xmd_std  = median_abs_deviation(v)
+    ruse = hm_cutoff_val
+    xmd = np.median(v)
+    xmd_std = median_abs_deviation(v)
     vlen_start = len(v)
     n = 1
     finished = False
-    if hm_cutoff:
-       ruse,zero = [hm_cutoff,9999.0] if isinstance(hm_cutoff,float) else hm_cutoff
-    weights = np_ones(len(v))
-    removed=[]
+
+    if hm_cutoff_val:
+        ruse, zero_val = [hm_cutoff_val, 9999.0] if isinstance(hm_cutoff_val, float) else hm_cutoff_val
+    else:
+        zero_val = 9999.0
+
+    weights = np.ones(len(v))
+    removed = []
+    whuber_fail = False
+    typemean = 'unknown'
+    whystop = 'unknown'
+
     while not finished:
-          amd = xmd
-          if hm_cutoff:
-             #print("Calling Whuber","ruse: ",ruse,"zero: ",zero,"V: ",v,"XMD: ",xmd)
-             whuber_fail = False
-             try:
-                 xmd,xmd_std,weights = whuber(v,xmd,ruse,zero)
-                 typemean = 'whuber'
-             except Exception as e:
-                 whuber_fail = True
-          if not hm_cutoff or whuber_fail:
-             xmd,xmd_std,weights,removed = rm_outliers(v,weights,s,xmd,xmd_std,max_dev,out_cutoff,var_stop,it_max,removed)
-             if not whuber_fail:
-                typemean = 'rmoutl'
-             else:
-                typemean = 'rowhfl'
-          xmd_var = abs(amd-xmd)
-          if xmd_var <= var_stop:
-             finished = True
-             whystop=typemean+'_varstop='+str(xmd_var)+'_n='+str(n)
-          elif n == it_max:
-             finished = True
-             whystop=typemean+'_maxit='+str(n)+'_xmdvar='+str(xmd_var)
-          n += 1
-    vlen_stop = round(np_sum(weights),2)
-    return xmd,xmd_std,vlen_start,vlen_stop,whystop,removed,weights,whuber_fail
+        amd = xmd
+        if hm_cutoff_val:
+            whuber_fail = False
+            try:
+                xmd, xmd_std, weights = whuber(v, xmd, ruse, zero_val)
+                typemean = 'whuber'
+            except (ZeroDivisionError, ValueError) as err:
+                logging.warning(f"Calcolo della media di Huber fallito. Fallback in rm_outliers. Errore: {err}")
+                whuber_fail = True
 
-def char_quality(nu,nw,d,m,r):
-    #nu =  number of used stations
-    #nw =  weighted number of used stations
-    # d = minimum distance km
-    # m = magnitude
-    # defining position 1: this character is defined according to a rule described in a Sismo-CAT course at INGV 
-    # uploaded in Google Drive on 24 May 2019 by Anna Nardi (https://docs.google.com/presentation/d/16ZzCgUQhkS7eIcbVNX-IH8IAmbPbQ7K6Fq45jte3ON0/edit#slide=id.p12)
-    # there, only A B C are defined: outside of this definitions, all is D
-    # In the original formula, the nu is the number of components: since in pyml we do not use separate channels but station mean ML values, to keep the validity of
-    # the adopted parameters, we multiply nu by 2 channels
+        if not hm_cutoff_val or whuber_fail:
+            xmd, xmd_std, weights, removed = rm_outliers(v, weights, s, xmd, xmd_std, max_dev, out_cutoff, removed)
+            typemean = 'rowhfl' if whuber_fail else 'rmoutl'
+
+        xmd_var = abs(amd - xmd)
+        if xmd_var <= var_stop:
+            finished = True
+            whystop = f"{typemean}_varstop={xmd_var}_n={n}"
+        elif n == it_max:
+            finished = True
+            whystop = f"{typemean}_maxit={n}_xmdvar={xmd_var}"
+        n += 1
+
+    vlen_stop = round(np.sum(weights), 2)
+    return xmd, xmd_std, vlen_start, vlen_stop, whystop, removed, weights, whuber_fail
+
+
+def char_quality(nu, d, m, r):
     q1type = 'course'
+    q1, q2 = 'D', 'D'
     if q1type == 'basili':
-       if (mlog2(nu*2)-2) >= m:
-          q1 = 'A'
-       elif (mlog2(nu*2)-1) >= m:
-          q1 = 'B'
-       elif mlog2(nu*2) >= m:
-          q1 = 'C'
-       elif mlog2(nu*2) < m:
-          q1 = 'D'
-       else:
-          q1 = 'E'
-    elif q1type == 'course':
-         if d <= 50. and nu*2 > (m*10.0+1):
+        if (log2(nu * 2) - 2) >= m:
             q1 = 'A'
-         elif d <= 100.0 and nu*2 > (m*7.5+1):
+        elif (log2(nu * 2) - 1) >= m:
             q1 = 'B'
-         elif d <= 150.0 and nu*2 > (m*5.0+1):
+        elif log2(nu * 2) >= m:
             q1 = 'C'
-         else:
+        elif log2(nu * 2) < m:
             q1 = 'D'
-    # defining position 2 (by Alberto Basili for INGV Locator code, statement since 2010)
-    #A = rms<=0.2
-    #B = 0.2<rms<=0.3
-    #C = 0.3<rms<=0.4
-    #D = 0.4<rms
+        else:
+            q1 = 'E'
+    elif q1type == 'course':
+        if d <= 50. and nu * 2 > (m * 10.0 + 1):
+            q1 = 'A'
+        elif d <= 100.0 and nu * 2 > (m * 7.5 + 1):
+            q1 = 'B'
+        elif d <= 150.0 and nu * 2 > (m * 5.0 + 1):
+            q1 = 'C'
+        else:
+            q1 = 'D'
+
     if r <= 0.2:
-       q2 = 'A'
-    elif r > 0.2 and r <= 0.3:
-       q2 = 'B'
-    elif r > 0.3 and r <= 0.4:
-       q2 = 'C'
+        q2 = 'A'
+    elif 0.2 < r <= 0.3:
+        q2 = 'B'
+    elif 0.3 < r <= 0.4:
+        q2 = 'C'
     elif r > 0.4:
-       q2 = 'D'
-    return ''.join((q1,q2))
+        q2 = 'D'
+    return ''.join((q1, q2))
 
-def standard_pyml_load(infile,eventid,conf_file,log_out,f):
-   # Now loading the configuration file
-   if os.path.exists(conf_file) and os.path.getsize(conf_file) > 0:
-      paramfile=conf_file
-   else:
-      sys.stderr.write("Config file " + args.conf + " not existing or empty\n\n")
-      sys.exit(2)
-   confObj = cp.ConfigParser()
-   confObj.read(paramfile)
 
-   #try:
-   #    filenames_parameters=get_config_dictionary(confObj, 'iofilenames')
-   #except Exception as e:
-   #    sys.stderr.write(("\n"+str(e)+"\n\n"))
-   #    sys.exit(1)
-   #try:
-   #    mf=eval(filenames_parameters['magnitudes'])
-   #    lf=eval(filenames_parameters['log'])
-   #    if mf:
-   #       magnitudes_out=open(str(eventid)+'_'+str(mf),'w')
-   #    else:
-   #       magnitudes_out=open(str(eventid)+'_pyml_magnitudes.out','w')
-   #    if lf:
-   #       log_out=open(str(eventid)+'_'+str(lf),'w')
-   #    else:
-   #       log_out=open(str(eventid)+'_pyml_general.log','w')
-   #except Exception as e:
-   #    sys.stderr.write(("\n"+str(e)+"\n\n"))
-   #    sys.exit(1)
-    
-   
-   #Net;Sta;Loc;Cha;Lat;Lon;Ele;EpiDistance(km);IpoDistance(km);MinAmp(m);MinAmpTime;MaxAmp(m);MaxAmpTime;DeltaPeaks;Method;NoiseWinMin;NoiseWinMax;SignalWinMin;SignalWinMax;P_Pick;Synth;S_Picks;Synth;Nyq;LoCo;HiCo;LenOverSNRIn;SNRIn;ML_H;CORR_HB;CORR_USED_HB;ML_DB;CORR_DB;CORR_USED_DB
-   dfa=pandas.read_csv(f,sep=';',index_col=False)
-   dfa.columns = dfa.columns.str.lower()
-   
-   # Here we load the basic condition to decide if to proceed or not
-   # If there is no P do we proceed with theoretical or skip the channel?
-   # If there is no S do we proceed with theoretical or skip the channel?
-   preconditions_parameters=get_config_dictionary(confObj, 'preconditions')
-   theoP=eval(preconditions_parameters['theoretical_p'])
-   theoS=eval(preconditions_parameters['theoretical_s'])
-   delta_corner=float(preconditions_parameters['delta_corner'])
-   max_lowcorner=float(preconditions_parameters['max_lowcorner'])
-   
-   try:
-      station_magnitude_parameters=get_config_dictionary(confObj, 'station_magnitude')
-   except:
-      log_out.write("No section 'station_magnitude' in config file")
-      sys.exit()
-   try:
-      mag_mean_type=eval(station_magnitude_parameters['mag_mean_type'])
-   except:
-      log_out.write("No parameter 'mag_mean_type' in section 'station_magnitude' of config file")
-      sys.exit()
-   if mag_mean_type == 'meanamp':
-      try:
-         amp_mean_type=eval(station_magnitude_parameters['amp_mean_type'])
-      except:
-         log_out.write("No parameter 'amp_mean_type' in section 'station_magnitude' of config file")
-         sys.exit()
-   try:
-      delta_peaks=float(station_magnitude_parameters['delta_peaks'])
-   except:
-      log_out.write("No parameter 'delta_peaks' in section 'station_magnitude' of config file")
-      sys.exit()
-   try:
-      use_stcorr_hb=eval(station_magnitude_parameters['use_stcorr_hb'])
-   except:
-      log_out.write("No parameter 'use_stcorr_hb' in section 'station_magnitude' of config file")
-      sys.exit()
-   try: 
-      use_stcorr_db=eval(station_magnitude_parameters['use_stcorr_db'])
-   except:
-      log_out.write("No parameter 'use_stcorr_db' in section 'station_magnitude' of config file")
-      sys.exit()
-   try:
-      when_no_stcorr_hb=eval(station_magnitude_parameters['when_no_stcorr_hb'])
-   except:
-      log_out.write("No parameter 'when_no_stcorrhb' in section 'station_magnitude' of config file")
-      sys.exit()
-   try:
-      when_no_stcorr_db=eval(station_magnitude_parameters['when_no_stcorr_db'])
-   except:
-      log_out.write("No parameter 'when_no_stcorrdb' in section 'station_magnitude' of config file")
-      sys.exit()
-   
-   try:
-      event_magnitude_parameters=get_config_dictionary(confObj, 'event_magnitude')
-   except:
-      log_out.write("No section 'event_magnitude' in config file")
-      sys.exit()
-   try:
-      mindist=float(event_magnitude_parameters['mindist'])
-   except:
-      log_out.write("No parameter 'mindist' in section 'event_magnitude' of config file")
-      sys.exit()
-   try: 
-      maxdist=float(event_magnitude_parameters['maxdist'])
-   except:
-      log_out.write("No parameter 'maxdist' in section 'event_magnitude' of config file")
-      sys.exit()
-   try:
-      hm_cutoff=eval(event_magnitude_parameters['hm_cutoff'])
-   except:
-      log_out.write("No parameter 'hm_cutoff' in section 'event_magnitude' of config file")
-      sys.exit()
-   try:
-      outliers_max_it=int(event_magnitude_parameters['outliers_max_it'])
-   except:
-      log_out.write("No parameter 'outliers_max_it' in section 'event_magnitude' of config file")
-      sys.exit()
-   try:
-      outliers_red_stop=float(event_magnitude_parameters['outliers_red_stop'])
-   except:
-      log_out.write("No parameter 'outliers_red_stop' in section 'event_magnitude' of config file")
-      sys.exit()
-   try:
-      outliers_nstd=float(event_magnitude_parameters['outliers_nstd'])
-   except:
-      log_out.write("No parameter 'outliers_nstd' in section 'event_magnitude' of config file")
-      sys.exit()
-   try:
-      outliers_cutoff=float(event_magnitude_parameters['outliers_cutoff'])
-   except:
-      log_out.write("No parameter 'outliers_cutoff' in section 'event_magnitude' of config file")
-      sys.exit()
-   return dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff 
+def standard_pyml_load(infile_val, conf_file_val):
+    if os.path.exists(conf_file_val) and os.path.getsize(conf_file_val) > 0:
+        paramfile = conf_file_val
+    else:
+        sys.stderr.write(f"Config file {conf_file_val} not existing or empty\n\n")
+        sys.exit(2)
 
-def json_pyml_load(json_in):
-   try:
-      config=json_in['data']['pyml_conf']
-   except:
-      config=False
-   try:
-      origin=json_in['data']['origin']
-   except:
-      origin=False
-   try:
-      dfa = pandas.DataFrame(json_in['data']['amplitudes'])
-   except:
-      dfa=pandas.DataFrame()
-   return dfa,config,origin
+    conf_obj = cp.ConfigParser()
+    conf_obj.read(paramfile)
+    df_amp = pd.read_csv(infile_val, sep=';', index_col=False)
+    df_amp.columns = df_amp.columns.str.lower()
 
-# JSON ENCODER CLASS
+    pre_params = get_config_dictionary(conf_obj, 'preconditions')
+    theo_p_val = eval(pre_params['theoretical_p'])
+    theo_s_val = eval(pre_params['theoretical_s'])
+
+    sta_params = get_config_dictionary(conf_obj, 'station_magnitude')
+    mag_mean_type_val = eval(sta_params['mag_mean_type'])
+    amp_mean_type_val = eval(sta_params['amp_mean_type']) if mag_mean_type_val == 'meanamp' else None
+    delta_peaks_val = float(sta_params['delta_peaks'])
+    use_stcorr_hb_val = eval(sta_params['use_stcorr_hb'])
+    use_stcorr_db_val = eval(sta_params['use_stcorr_db'])
+    when_no_stcorr_hb_val = eval(sta_params['when_no_stcorr_hb'])
+    when_no_stcorr_db_val = eval(sta_params['when_no_stcorr_db'])
+
+    ev_params = get_config_dictionary(conf_obj, 'event_magnitude')
+    mindist_val = float(ev_params['mindist'])
+    maxdist_val = float(ev_params['maxdist'])
+    hm_cutoff_val = eval(ev_params['hm_cutoff'])
+    outliers_max_it_val = int(ev_params['outliers_max_it'])
+    outliers_red_stop_val = float(ev_params['outliers_red_stop'])
+    outliers_nstd_val = float(ev_params['outliers_nstd'])
+    outliers_cutoff_val = float(ev_params['outliers_cutoff'])
+
+    return df_amp, theo_p_val, theo_s_val, delta_peaks_val, use_stcorr_hb_val, use_stcorr_db_val, when_no_stcorr_hb_val, when_no_stcorr_db_val, mindist_val, maxdist_val, hm_cutoff_val, outliers_max_it_val, outliers_red_stop_val, outliers_nstd_val, outliers_cutoff_val, mag_mean_type_val, amp_mean_type_val
+
+
+def json_pyml_load(json_input):
+    cfg = json_input.get('data', {}).get('pyml_conf', False)
+    orig = json_input.get('data', {}).get('origin', False)
+    amps = json_input.get('data', {}).get('amplitudes', [])
+    df_amp = pd.DataFrame(amps)
+    return df_amp, cfg, orig
+
+
 class DataEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, decimal.Decimal):
             return float(o)
-
         if isinstance(o, datetime):
             return o.isoformat()
-
         return json.JSONEncoder.default(self, o)
 
+
 def json_response_structure():
-    null=''
+    null = ''
     generic = {
-               "type": null,
-               "title": null,
-               "status": null,
-               "detail": null,
-               "instance": null,
-               "version": null,
-               "request_submitted": null,
-               "errors": {
-                          "inputfile": [],
-                          "arguments": []
-                         }
-              }
+        "type": null, "title": null, "status": null, "detail": null,
+        "instance": null, "version": null, "request_submitted": null,
+        "errors": {"inputfile": [], "arguments": []}
+    }
     response = {
-                "random_string": null,
-                "hostname": {},
-                "magnitudes": {},
-                "stationmagnitudes": [],
-                "log": {}
-               }
-    
-    log = {
-           "magnitude": {},
-           "stationmagnitudes": []
-          }
+        "random_string": null, "hostname": {}, "magnitudes": {},
+        "stationmagnitudes": [], "log": {}
+    }
+    log_dict = {"magnitude": {}, "stationmagnitudes": []}
     log_magnitude = {
-                     "hb": {
-                            "status": null,   # eg: "warning"
-                            "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist"
-                            "extended": null, # eg: "Distance is 6.045133888690926 km"
-                           },
-                     "db": {
-                            "status": null,   # eg: "warning",
-                            "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
-                            "extended": null, # eg: "Distance is 6.045133888690926 km"
-                           }
-                    }
+        "hb": {"status": null, "summary": null, "extended": null},
+        "db": {"status": null, "summary": null, "extended": null}
+    }
     log_stationmagnitude = {
-                            "net": null,      # eg: "IV"
-                            "sta": null,      # eg: "FDMO",
-                            "loc": null,      # eg: "--",
-                            "band_inst": null,      # eg: "HH",
-                            "status": null,   # eg: "warning",
-                            "summary": null,  # eg: "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
-                            "extended": null, # eg: "Distance is 6.045133888690926 km"
-                            "channels": []
-                           }
+        "net": null, "sta": null, "loc": null, "band_inst": null,
+        "status": null, "summary": null, "extended": null, "channels": []
+    }
     log_stationmagnitude_channel = {
-                                     "orientation": null,      # "N",
-                                     "status": null,   # "ok",
-                                     "summary": null,  # "In ML  HuttonBoore Station IV_FDMO_--_HH_ingv skipped due to ipodist",
-                                     "extended": null, # "Distance is 6.045133888690926 km"
-                                   }
+        "orientation": null, "status": null, "summary": null, "extended": null
+    }
     magnitudes = {
-                  "hb": {},
-                  "db": {},
-                  "ampmethod": null,
-                  "magmethod": null,
-                  "loopexitcondition": null
-                 }
+        "hb": {}, "db": {}, "ampmethod": null, "magmethod": null, "loopexitcondition": null
+    }
     emag = {
-            "ml": null,
-            "std": null,
-            "totsta": null,
-            "usedsta": null,
-            "quality": '--'
-           }
-            
+        "ml": null, "std": null, "totsta": null, "usedsta": null, "quality": '--'
+    }
     stationmagnitude = {
-                         "net": null,
-                         "sta": null,
-                         "cha": null,
-                         "loc": null,
-                         "amp1": null,
-                         "time1": null,
-                         "amp2": null,
-                         "time2": null,
-#                         "period": null,
-#                        "lat": null,
-#                        "lon": null,
-#                        "elev": null,
-                         "ep_distance_km": null,
-                         "ep_distance_delta": null,
-                         "orig_distance": null,
-                         "azimuth": None,
-                         "hb": {
-                             "ml": null,
-                             "w": null 
-                         },
-                         "db": {
-                             "ml": null,
-                             "w": null
-                         }
-                        }
-    return response,generic,log,log_magnitude,log_stationmagnitude,log_stationmagnitude_channel,magnitudes,stationmagnitude,emag
+        "net": null, "sta": null, "cha": null, "loc": null,
+        "amp1": null, "time1": null, "amp2": null, "time2": null,
+        "ep_distance_km": null, "ep_distance_delta": null,
+        "orig_distance": null, "azimuth": None,
+        "hb": {"ml": null, "w": null},
+        "db": {"ml": null, "w": null}
+    }
+    return response, generic, log_dict, log_magnitude, log_stationmagnitude, log_stationmagnitude_channel, magnitudes, stationmagnitude, emag
+
 
 def json_pyml_response(r):
-    x=json.dumps(r,cls=DataEncoder)
-    return x 
+    return json.dumps(r, cls=DataEncoder)
+
 
 ###############################################################
-###### End of Functions ##########
 ###### Main starts here ##########
-pyml_version="1.0.0"
-args = parseArguments()
-
-# setting up geographiclib
+pyml_version = "1.0.0"
+args = parse_arguments()
 geod = Geodesic.WGS84
 
-exit_condition=False
-jresponse,jbadrequest,jlog,jlog_mag,jlog_stamag,jlog_stamag_cha,jmagnitudes,jstationmagnitude,jemag = json_response_structure()
-# JSON STRUCTURE DEEPCOPY
-resp  = copy.deepcopy(jresponse)
-log   = copy.deepcopy(jlog)
-logm  = copy.deepcopy(jlog_mag)
+# Inizializzazioni sicure per il Linter e per la robustezza
+dfa = pd.DataFrame()
+origin = False
+config = None
+eventid = 0
+magnitudes_out = False
+log_out = False
+exit_condition = False
+met = 'ingv'
+use_stcorr_hb = None
+use_stcorr_db = None
+when_no_stcorr_hb = None
+when_no_stcorr_db = None
+mindist = None
+maxdist = None
+delta_peaks = None
+mag_mean_type = None
+amp_mean_type = None
+outliers_max_it = None
+outliers_red_stop = None
+outliers_nstd = None
+outliers_cutoff = None
+hm_cutoff = None
+theo_p = None
+theo_s = None
+
+jresponse, jbadrequest, jlog, jlog_mag, jlog_stamag, jlog_stamag_cha, jmagnitudes, jstationmagnitude, jemag = json_response_structure()
+resp = copy.deepcopy(jresponse)
+log = copy.deepcopy(jlog)
+logm = copy.deepcopy(jlog_mag)
 gresp = copy.deepcopy(jbadrequest)
 resp['random_string'] = 'github/ingv/pyml'
 resp['hostname'] = socket.gethostname()
 
 if args.out_format.lower() == 'txt':
-   magnitudes_out=sys.stdout
-   log_out=sys.stderr
+    magnitudes_out = sys.stdout
+    log_out = sys.stderr
 elif args.out_format.lower() == 'json':
-   magnitudes_out=False
-   log_out=False
+    magnitudes_out = False
+    log_out = False
 else:
-#   if log_out:
-#      sys.stderr.write("The given out format "+args.out_format.lower()+"/"+args.out_format+" is unknown\n")
-#   else:
-   log_out=False
-   gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
-   gresp['title'] = "Unprocessable entity"
-   gresp['status'] = "422"
-   gresp['detail'] = "The given data was invalid"
-   gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
-   gresp['version'] = str(pyml_version)
-   gresp['request_submitted'] = str(datetime.now())
-   gresp['errors']["arguments"].append("The given argument out format "+args.out_format.lower()+"/"+args.out_format+" is unknown")
-   exit_condition=True
+    log_out = False
+    gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
+    gresp['status'] = "422"
+    gresp['errors']["arguments"].append(f"The given argument out format {args.out_format} is unknown")
+    exit_condition = True
 
-############## PYML works either in CSV in/out or JSON in/out) #############################################################
-### IF input format is csv pyml works reading csv files, with configuration loaded from a dictionary file
 if args.in_file_format.lower() == 'csv':
-   infile=args.in_file_name
-   conf_file = args.conf
-   eventid=args.eventid
-   dfa,theoP,theoS,delta_corner,max_lowcorner,delta_peaks,use_stcorr_hb,use_stcorr_db,when_no_stcorr_hb,when_no_stcorr_db,mindist,maxdist,hm_cutoff,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff = standard_pyml_load(infile,eventid,conf_file,log_out,infile)
-   if dfa.empty:
-      if log_out:
-         sys.stderr.write("The given input pyamp file "+infile+" was incomplete\n")
-      else:
-         gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
-         gresp['title'] = "Unprocessable entity"
-         gresp['status'] = "422"
-         gresp['detail'] = "The given data was invalid"
-         gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
-         gresp['version'] = str(pyml_version)
-         gresp['request_submitted'] = str(datetime.now())
-         gresp['errors']["inputfile"].append("The given input file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
-         exit_condition=True
+    infile = args.in_file_name
+    conf_file = args.conf
+    eventid = args.eventid
+
+    dfa, theo_p, theo_s, delta_peaks, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb, when_no_stcorr_db, mindist, maxdist, hm_cutoff, outliers_max_it, outliers_red_stop, outliers_nstd, outliers_cutoff, mag_mean_type, amp_mean_type = standard_pyml_load(infile, conf_file)
+    origin = False
+    if dfa.empty:
+        gresp['status'] = "422"
+        gresp['errors']["inputfile"].append("The given input file was incomplete")
+        exit_condition = True
+
 elif args.in_file_format.lower() == 'json':
-   ### IF JSON argument is given, pyml works reading both input data a configuration options from the same json file, and it writes out results and log ONLY in one single JSON file
-   if os.path.exists(args.in_file_name):
-      json_in=pandas.read_json(args.in_file_name)
-      dfa,config,origin = json_pyml_load(json_in)
-      eventid=0
-      if dfa.empty or not config or not origin:
-         if log_out:
-            sys.stderr.write("The given input file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
-         else:
-            gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
-            gresp['title'] = "Unprocessable entity"
+    if os.path.exists(args.in_file_name):
+        try:
+            with open(args.in_file_name, 'r') as f:
+                json_in = json.load(f)
+            dfa, config, origin = json_pyml_load(json_in)
+        except json.JSONDecodeError:
+            dfa = pd.DataFrame()
+
+        if dfa.empty or not config or not origin:
             gresp['status'] = "422"
-            gresp['detail'] = "The given data was invalid"
-            gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
-            gresp['version'] = str(pyml_version)
-            gresp['request_submitted'] = str(datetime.now())
-            gresp['errors']["inputfile"].append("The given input file "+args.in_file_name+" format "+args.in_file_format.lower()+" was incomplete")
-            exit_condition=True
-   else:
-      if log_out:
-         sys.stderr.write("No input file "+args.in_file_name+" format "+args.in_file_format.lower()+" found: exit")
-      else:
-         gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
-         gresp['title'] = "Unprocessable entity"
-         gresp['status'] = "422"
-         gresp['detail'] = "The given data was invalid"
-         gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
-         gresp['version'] = str(pyml_version)
-         gresp['request_submitted'] = str(datetime.now())
-         gresp['errors']["inputfile"].append("No input file "+args.in_file_name+" format "+args.in_file_format.lower()+" found.")
-         exit_condition=True
+            gresp['errors']["inputfile"].append("The given input file was incomplete")
+            exit_condition = True
+    else:
+        gresp['status'] = "422"
+        gresp['errors']["inputfile"].append("No input file found.")
+        exit_condition = True
 
-   if exit_condition:
-      sys.stdout.write(json_pyml_response(gresp))
-      sys.exit()
-   # Preconditions
-   theoP=config['preconditions']['theoretical_p']
-   theoS=config['preconditions']['theoretical_s']
-   delta_corner=config['preconditions']['delta_corner']
-   max_lowcorner=config['preconditions']['max_lowcorner']
-   # Stations magnitude
-   mag_mean_type=config['station_magnitude']['mag_mean_type']
-   amp_mean_type=config['station_magnitude']['amp_mean_type']
-   delta_peaks=config['station_magnitude']['delta_peaks']
-   use_stcorr_hb=config['station_magnitude']['use_stcorr_hb']
-   use_stcorr_db=config['station_magnitude']['use_stcorr_db']
-   when_no_stcorr_hb=config['station_magnitude']['when_no_stcorr_hb']
-   when_no_stcorr_db=config['station_magnitude']['when_no_stcorr_db']
-   # Event Magnitude
-   mindist=config['event_magnitude']['mindist']
-   maxdist=config['event_magnitude']['maxdist']
-   hm_cutoff=config['event_magnitude']['hm_cutoff']
-   outliers_max_it=config['event_magnitude']['outliers_max_it']
-   outliers_red_stop=config['event_magnitude']['outliers_red_stop']
-   outliers_nstd=config['event_magnitude']['outliers_nstd']
-   outliers_cutoff=config['event_magnitude']['outliers_cutoff']
+    if not exit_condition:
+        try:
+            theo_p = config['preconditions']['theoretical_p']
+            theo_s = config['preconditions']['theoretical_s']
+            mag_mean_type = config['station_magnitude']['mag_mean_type']
+            amp_mean_type = config['station_magnitude'].get('amp_mean_type', None)
+            delta_peaks = config['station_magnitude']['delta_peaks']
+            use_stcorr_hb = config['station_magnitude']['use_stcorr_hb']
+            use_stcorr_db = config['station_magnitude']['use_stcorr_db']
+            when_no_stcorr_hb = config['station_magnitude']['when_no_stcorr_hb']
+            when_no_stcorr_db = config['station_magnitude']['when_no_stcorr_db']
+            mindist = config['event_magnitude']['mindist']
+            maxdist = config['event_magnitude']['maxdist']
+            hm_cutoff = config['event_magnitude']['hm_cutoff']
+            outliers_max_it = config['event_magnitude']['outliers_max_it']
+            outliers_red_stop = config['event_magnitude']['outliers_red_stop']
+            outliers_nstd = config['event_magnitude']['outliers_nstd']
+            outliers_cutoff = config['event_magnitude']['outliers_cutoff']
+        except KeyError as k_err:
+            gresp['status'] = "422"
+            gresp['errors']["inputfile"].append(f"Missing config key: {k_err}")
+            exit_condition = True
 else:
-   if log_out:
-      sys.stderr.write("The given input format "+args.in_file_format.lower()+" is unknown")
-   else:
-      gresp['type'] = "https://tools.ietf.org/html/rfc4918#section-11.2"
-      gresp['title'] = "Unprocessable entity"
-      gresp['status'] = "422"
-      gresp['detail'] = "The given data was invalid"
-      gresp['instance'] = str(getpass.getuser())+'@'+str(socket.gethostname())
-      gresp['version'] = str(pyml_version)
-      gresp['request_submitted'] = str(datetime.now())
-      gresp['errors']["arguments"].append("The given input format "+args.in_file_format.lower()+" is unknown")
-      sys.stdout.write(json_pyml_response(gresp))
-   sys.exit()
+    gresp['status'] = "422"
+    gresp['errors']["arguments"].append("The given input format is unknown")
+    sys.stdout.write(json_pyml_response(gresp))
+    sys.exit()
 
-if args.clipped_info:
-   clip=pandas.read_csv(args.clipped_info,sep=';',index_col=False)
-
-cmp_keys=set()
-components_N={}
-components_E={}
-components_Z={}
-mcalc=True
+if exit_condition:
+    sys.stdout.write(json_pyml_response(gresp))
+    sys.exit()
 
 if args.dbona_corr:
-   try:
-      dbcorr=pandas.read_csv(args.dbona_corr,sep=';')
-   except:
-      log_out.write("File "+args.dbona_corr+" not found\n")
-      sys.exit()
+    try:
+        dbcorr = pd.read_csv(args.dbona_corr, sep=';')
+    except Exception as e:
+        if log_out: log_out.write(f"File {args.dbona_corr} not found: {e}\n")
+        sys.exit()
 else:
-   dbcorr=False
+    dbcorr = False
 
+unit = 1000 if args.in_file_format.lower() == 'csv' else 1
 
-start_time = time.perf_counter()
-km=1000.
-unit=1000 # pyamp units
-if args.in_file_format == 'json':
-   unit=1 #db units
+# --- LOGICA VETTORIALIZZATA ---
+dfa_valid, met = process_amplitudes_vectorized(dfa, origin, unit)
+dfa_processed = apply_magnitudes_and_group(dfa_valid, dbcorr, use_stcorr_hb, use_stcorr_db, when_no_stcorr_hb,
+                                           when_no_stcorr_db)
 
-for index, row in dfa.iterrows():
-    #### Testing the basic data ####
-    # Channel Info
-    try:
-       net = row['net']
-       net = False if pandas.isna(row['net']) else net
-    except:
-       net = False
-    try:
-       sta = row['sta']
-       sta = False if pandas.isna(row['sta']) else sta
-    except:
-       sta = False
-    try:
-       loc = row['loc']
-       loc = "--" if not loc else loc
-    except:
-       loc = False
-    try:
-       cha = row['cha']
-       cha = False if pandas.isna(row['cha']) else cha
-    except:
-       cha = False
-    # Amplitudes
-    try:
-       minamp=row['minamp(m)']*unit
-    except:
-       try:
-          minamp=row['amp1']*unit
-          minamp = False if pandas.isna(row['amp1']) else minamp
-       except:
-          minamp = False
-    try:
-       maxamp=row['maxamp(m)']*unit
-    except:
-       try:
-          maxamp=row['amp2']*unit
-          maxamp = False if pandas.isna(row['amp2']) else maxamp
-       except:
-          maxamp = False
+mean_hb_ml_sta, _, _ = create_sets_vectorized(dfa_processed, met, mindist, maxdist, delta_peaks, 0, use_stcorr_hb,
+                                              mag_mean_type, amp_mean_type)
+mean_db_ml_sta, _, _ = create_sets_vectorized(dfa_processed, met, mindist, maxdist, delta_peaks, 1, use_stcorr_db,
+                                              mag_mean_type, amp_mean_type)
 
-    # Amplitudes times 
-    try:
-       time_minamp=row['minamptime']
-    except:
-       try:
-          time_minamp=row['time1']
-          time_minamp = False if pandas.isna(row['time1']) else time_minamp
-       except:
-          time_minamp = False
-    try:
-       time_maxamp=row['maxamptime']
-    except:
-       try:
-          time_maxamp=row['time2']
-          time_maxamp = False if pandas.isna(row['time2']) else time_maxamp
-       except:
-          time_maxamp = False
-    try:
-       period=row['period']
-       period = False if pandas.isna(row['period']) else period
-    except:
-       period = False
-    # Station's coordinates
-    try:
-       stla=False if pandas.isna(row['lat']) else float(row['lat'])
-       stlo=False if pandas.isna(row['lon']) else float(row['lon'])
-       stel=False if pandas.isna(row['elev']) else float(row['elev'])/km
-    except:
-       stla=False
-       stlo=False
-       stel=False
+# Gestione calcoli statistici per HB
+ma_mlh, ma_stdh, ma_ns_s_h, ma_nsh = False, False, 0, 0
+cond_hb = "Failed"
+weights_hb, outliers_hb = [], []
+mlhb = False
 
-    check_list = {
-                  'net': net,
-                  'sta': sta,
-                  'loc': loc,
-                  'cha': cha,
-                  'minamp': minamp,
-                  'maxamp': maxamp,
-                  'time_minamp': time_minamp,
-                  'time_maxamp': time_maxamp,
-                  'stla': stla,
-                  'stlo': stlo
-                 }
-    false_keys = [key for key, value in check_list.items() if not value]
-    if 'net' in false_keys or 'sta' in false_keys or 'loc' in false_keys or 'cha' in false_keys:
-       continue
-    #if 'minamp' in false_keys or 'maxamp' in false_keys:
-    #   print(sta)
-
-    try:
-        corner_low=float(row['loco'])
-    except:
-        corner_low=False
-    try:
-        corner_high=float(row['hico'])
-    except:
-        corner_high=False
-    try:
-        met=row['method']
-
-    except:
-        met='ingv'
-    if args.clipped_info:
-       clp=clip.loc[(clip['net'] == net) & (clip['sta'] == sta) & (clip['cha'] == cha)]
-       if not clp.empty:
-          log_out.write(' '.join(("Component skipped:",str(net),str(sta),str(loc),str(cha)," due to cliping\n")))
-          continue
-    if corner_low and corner_high and (corner_low >= max_lowcorner or (corner_high-corner_low) < delta_corner):
-       log_out.write(' '.join(("Component skipped:",str(net),str(sta),str(loc),str(cha),str(corner_low),str(corner_high),"\n")))
-       continue
-    seed_id='.'.join((str(net),str(sta),str(loc),str(cha)))
-    if log_out:
-       log_out.write(' '.join(("Working on",seed_id,'\n')))
-    # In this block all the possibile conditions not to use this waveforms are checked so to reduce useless computing time
-    # First: get timing info from SAC to soon understand if this is a good cut or not for amplitude determination
-    #[distmeters,azi,bazi] = distaz(tr.stla,tr.stlo,tr.evla,tr.evlo)
-    #tr.dist=distmeters/1000.
-    components_key='_'.join((str(net),str(sta),str(loc),str(cha[0:2])))
-    cmp_keys.add(components_key)
-
-    # A precomputed distance does not imply that an azimuth was calculated.
-    epi_azimuth = None
-    try:
-        hypo_dist = row['ipodistance(km)']
-        epi_dist_km = row['epidistance(km)']
-        epi_dist_deg = None
-    except:
-        #calcolo le distanze
-        evla=float(origin['lat'])
-        evlo=float(origin['lon'])
-        evdp=float(origin['depth'])
-        if stla is False or stlo is False:
-           epi_dist_km = False
-           epi_dist_deg = False
-           hypo_dist = False
-           epi_azimuth = None
-        else:
-           geo_dict = geod.Inverse(evla,evlo,stla,stlo)
-           #distmeters = geo_dict['s12']
-           distdegrees = geo_dict['a12']
-           #azi = geo_dict['azi1']
-           #bazi = geo_dict['azi2']
-           [distmeters,azi,bazi] = distaz(stla,stlo,evla,evlo)
-           epi_dist_km = distmeters / km
-           epi_dist_deg = distdegrees
-           hypo_dist = msqrt(mpow(epi_dist_km,2)+mpow((evdp+stel),2))
-           epi_azimuth = azi
-        if log_out:
-           log_out.write(' '.join(("Coordinates:",str(net),str(sta),str(loc),str(cha),str(stla),str(stlo),str(stel),str(evla),str(evlo),str(evdp),str(epi_dist_km),str(epi_dist_deg),str(hypo_dist),str(epi_azimuth),"\n")))
-        
-    ml = [False]*2
-    amp = abs(maxamp-minamp)/2
-    components_key_met=components_key+'_'+met
-    # Loading stations corrections
-    dbsite=sta
-    try:
-        s_dibona=float(dbcorr.loc[dbcorr['sta'] == dbsite, 'c'].iloc[0]) # Di Bona Station correction
-    except:
-        s_dibona=False
-    s_hutton=False # Station correction for Hutton and Boore formula
-
-    if s_hutton or (not s_hutton and when_no_stcorr_hb):
-       try:
-           ml[0] = huttonboore(amp,hypo_dist,s_hutton,use_stcorr_hb)
-       except:
-           ml[0] = False
+if len(mean_hb_ml_sta) > 0:
+    mean_ml = [x[1] for x in mean_hb_ml_sta]
+    mean_ml_sta = np.asarray([x[0] for x in mean_hb_ml_sta], dtype=object)
+    ma_mlh, ma_stdh, ma_ns_s_h, ma_nsh, cond_hb, outliers_hb, weights_hb, wh_hb_fail = calculate_event_ml(mean_ml,
+                                                                                                          mean_ml_sta,
+                                                                                                          outliers_max_it,
+                                                                                                          outliers_red_stop,
+                                                                                                          outliers_nstd,
+                                                                                                          outliers_cutoff,
+                                                                                                          hm_cutoff)
+    if ma_mlh:
+        mlhb = True
+        logm['hb']['status'] = 'warning' if wh_hb_fail else 'ok'
     else:
-       ml[0] = False
+        logm['hb']['status'] = 'critical'
 
-    if s_dibona or (not s_dibona and when_no_stcorr_db):
-       try:
-           ml[1] = dibona(amp,hypo_dist,s_dibona,use_stcorr_db)
-       except:
-           ml[1] = False
+# Gestione calcoli statistici per DB
+ma_mld, ma_stdd, ma_ns_s_d, ma_nsd = False, False, 0, 0
+cond_db = "Failed"
+weights_db, outliers_db = [], []
+mldb = False
+
+if len(mean_db_ml_sta) > 0:
+    mean_ml = [x[1] for x in mean_db_ml_sta]
+    mean_ml_sta = np.asarray([x[0] for x in mean_db_ml_sta], dtype=object)
+    ma_mld, ma_stdd, ma_ns_s_d, ma_nsd, cond_db, outliers_db, weights_db, wh_db_fail = calculate_event_ml(mean_ml,
+                                                                                                          mean_ml_sta,
+                                                                                                          outliers_max_it,
+                                                                                                          outliers_red_stop,
+                                                                                                          outliers_nstd,
+                                                                                                          outliers_cutoff,
+                                                                                                          hm_cutoff)
+    if ma_mld:
+        mldb = True
+        logm['db']['status'] = 'warning' if wh_db_fail else 'ok'
     else:
-       ml[1] = False
-
-    # Preserve missing elevation separately from the valid sea-level value 0.
-    station_elevation_m = None if stel is False else stel*km
-    if cha[2] == 'N':
-       components_N[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,station_elevation_m,epi_azimuth]
-    elif cha[2] == 'E':
-       components_E[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,station_elevation_m,epi_azimuth]
-    elif cha[2] == 'Z':
-       components_Z[components_key_met]=[ml,[minamp,maxamp],epi_dist_km,epi_dist_deg,hypo_dist,[s_hutton,s_dibona],time_minamp,time_maxamp,period,stla,stlo,station_elevation_m,epi_azimuth]
-    else:
-       if log_out:
-          log_out.write(' '.join(("Component not recognized for ",str(net),str(sta),str(loc),str(cha),"\n")))
-
-# Hutton and Boore
-mean_hb_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,0,when_no_stcorr_hb,use_stcorr_hb,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
-#if log_out:
-#   log_out.write("create_sets: the execution time is: "+str(execution_time)+"\n")
-if len(mean_hb_ml_sta) == 0:
-   msg_sts = 'critical'
-   msg_sum='HuttonBoore List is empty'
-   msg_ext = 'All the stations missing due to only one channel is present, or out of minmax distance'
-   if log_out:
-      log_out.write(msg_sts+":"+msg_sum+" --> "+msg_ext+"\n")
-   mlhb = False
-else:
-   #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
-   mean_ml = list(list(zip(*mean_hb_ml_sta))[1])
-   mean_ml_sta = np_asarray(list(list(zip(*mean_hb_ml_sta))[0]), dtype=object)
-   ma_mlh,ma_stdh,ma_ns_s_h,ma_nsh,cond_hb,outliers_hb,weights_hb,wh_hb_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
-   if ma_mlh:
-      mlhb = True
-      if wh_hb_fail:
-         if log_out:
-            log_out.write("Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead\n")
-         msg_sts='warning'
-         msg_sum="Hutton&Boore: Weighted Huber Mean failed, Outliers Removal used instead"
-         msg_ext=""
-      else:
-         msg_sts='ok'
-         msg_sum=""
-         msg_ext=""
-   else:
-      mlhb = False
-      if log_out:
-           log_out.write("Hutton&Boore: Both Weighted Huber Mean and Outliers Removal failed\n")
-      msg_sts='critical'
-      msg_sum="Hutton&Boore: Both Weighted Huber Mean and Outliers Removal failed"
-      msg_ext=""
-logm['hb']['status'] = msg_sts
-logm['hb']['summary'] = msg_sum
-logm['hb']['extended'] = msg_ext
-#mm_mlh,mm_stdh,mm_ns_s_h,mm_nsh,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
-# Di Bona
-mean_db_ml_sta,min_dist,log['stationmagnitudes'] = create_sets(cmp_keys,components_N,components_E,met,mindist,maxdist,delta_peaks,1,when_no_stcorr_db,use_stcorr_db,mag_mean_type,amp_mean_type,log['stationmagnitudes'],jlog_stamag,jlog_stamag_cha)
-if len(mean_db_ml_sta) == 0:
-   msg_sts = 'critical'
-   msg_sum='Dibona List is empty'
-   msg_ext = 'All the stations missing due to only one channel is present, or out of minmax distance'
-   if log_out:
-      log_out.write(msg_sts+":"+msg_sum+" --> "+msg_ext+"\n")
-   mldb = False
-else:
-   #meanmag_ml = list(list(zip(*meanmag_ml_sta))[1])
-   mean_ml = list(list(zip(*mean_db_ml_sta))[1])
-   mean_ml_sta = np_asarray(list(list(zip(*mean_db_ml_sta))[0]), dtype=object)
-   ma_mld,ma_stdd,ma_ns_s_d,ma_nsd,cond_db,outliers_db,weights_db,wh_db_fail = calculate_event_ml(mean_ml,mean_ml_sta,outliers_max_it,outliers_red_stop,outliers_nstd,outliers_cutoff,hm_cutoff)
-   if ma_mld:
-      mldb = True
-      if wh_db_fail:
-         if log_out:
-            log_out.write("Di Bona: Weighted Huber Mean failed, Outliers Removal used instead\n")
-         msg_st ="warning"
-         msg_sum="Di Bona: Weighted Huber Mean failed, Outliers Removal used instead"
-         msg_ext=""
-      else:
-         msg_sts ="ok"
-         msg_sum=""
-         msg_ext=""
-   else:
-      mldb = False
-      if log_out:
-           log_out.write("Di Bona: Both Weighted Huber Mean and Outliers Removal failed\n")
-      msg_sts='critical'
-      msg_sum="Di Bona: Both Weighted Huber Mean and Outliers Removal failed"
-      msg_ext=""
-
-logm['db']['status'] = msg_sts
-logm['db']['summary'] = msg_sum
-logm['db']['extended'] = msg_ext
+        logm['db']['status'] = 'critical'
 
 resp["log"]['magnitude'] = logm
-resp["log"]['stationmagnitudes'] = log['stationmagnitudes']
 
 if not mlhb and not mldb:
-   if log_out:
-      log_out.write("Neither Hutton&Boore nor Di Bona ML could be calculate\n")
-   sys.stdout.write(json_pyml_response(resp))
-   sys.exit()
-#else:
-#   if not mlhb:
-#      if log_out:
-#         log_out.write("Hutton&Boore ML was impossible to calculate\n")
-#      sys.stdout.write(json_pyml_response(resp))
-#   elif not mldb:
-#      if log_out:
-#         log_out.write("Di Bona ML was impossible to calculate\n")
-#      sys.stdout.write(json_pyml_response(resp))
-#mm_mld,mm_stdd,mm_ns_s_d,mm_nsd,cond = calculate_event_ml(meanmag_ml_sta,outliers_max_it,outliers_red_stop)
-
-######################################################
-#          Writing magnitudes.csv file               #
-######################################################
-#if magnitudes_out:
-#   magnitudes_out=open(magnitudes_out,'w')
-#else:
-#   magnitudes_out=sys.stdout
-
-if mag_mean_type == 'meanmag':
-   amp_mean_type='False'
+    if log_out: log_out.write("Neither Hutton&Boore nor Di Bona ML could be calculated\n")
+    sys.stdout.write(json_pyml_response(resp))
+    sys.exit()
 
 if magnitudes_out:
-   magnitudes_out.write("EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;amp_mean_type;mag_mean_type;loopexitcondition\n")
-   magnitudes_out.write(';'.join((str(eventid),str(ma_mlh),str(ma_stdh),str(ma_ns_s_h),str(ma_nsh),str(ma_mld),str(ma_stdd),str(ma_ns_s_d),str(ma_nsd),met,amp_mean_type,mag_mean_type,cond_hb+'-'+cond_db,'\n')))
+    amp_mean_type_str = amp_mean_type if mag_mean_type == 'meanamp' else 'False'
+    magnitudes_out.write(
+        "EventID;ML_HB;Std_HB;TOTSTA_HB;USEDSTA_HB;ML_DB;Std_DB;TOTSTA_DB;USEDSTA_DB;ampmethod;amp_mean_type;mag_mean_type;loopexitcondition\n")
+    magnitudes_out.write(
+        f"{eventid};{ma_mlh};{ma_stdh};{ma_ns_s_h};{ma_nsh};{ma_mld};{ma_stdd};{ma_ns_s_d};{ma_nsd};{met};{amp_mean_type_str};{mag_mean_type};{cond_hb}-{cond_db}\n")
 
-# JSON WRITE
+# Aggiornamento JSON per l'intero evento
 jmags = copy.deepcopy(jmagnitudes)
-empty_jemag = {}
 if ma_mlh:
-   jhb = copy.deepcopy(jemag)
-   jhb['ml'] = ma_mlh
-   jhb['std'] = ma_stdh
-   jhb['totsta'] = ma_ns_s_h
-   jhb['usedsta'] = ma_nsh
-   jhb['quality'] = char_quality(ma_ns_s_h,ma_nsh,mindist,ma_mlh,ma_stdh)
-else:
-   jhb = copy.deepcopy(empty_jemag)
-jmags["hb"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
+    jhb = copy.deepcopy(jemag)
+    jhb.update({'ml': ma_mlh, 'std': ma_stdh, 'totsta': ma_ns_s_h, 'usedsta': ma_nsh,
+                'quality': char_quality(ma_ns_s_h, mindist, ma_mlh, ma_stdh)})
+    jmags["hb"].update(jhb)
 if ma_mld:
-   jhb = copy.deepcopy(jemag)
-   jhb['ml'] = ma_mld
-   jhb['std'] = ma_stdd
-   jhb['totsta'] = ma_ns_s_d
-   jhb['usedsta'] = ma_nsd
-   jhb['quality'] = char_quality(ma_ns_s_d,ma_nsd,mindist,ma_mld,ma_stdd)
-else:
-   jhb = copy.deepcopy(empty_jemag)
-jmags["db"].update(jhb) # push oggetto "magnitudo" HB in oggetto magnitudes
-jmags["ampmethod"] = met
-jmags["magmethod"] = mag_mean_type
-jmags["loopexitcondition"] = cond_hb+'-'+cond_db
+    jdb = copy.deepcopy(jemag)
+    jdb.update({'ml': ma_mld, 'std': ma_stdd, 'totsta': ma_ns_s_d, 'usedsta': ma_nsd,
+                'quality': char_quality(ma_ns_s_d, mindist, ma_mld, ma_stdd)})
+    jmags["db"].update(jdb)
+jmags.update({"ampmethod": met, "magmethod": mag_mean_type, "loopexitcondition": f"{cond_hb}-{cond_db}"})
 resp["magnitudes"].update(jmags)
 
-channels_dictionary = {}
-for x, y, wx, wy in zip(mean_hb_ml_sta, mean_db_ml_sta, weights_hb, weights_db):
-    sth,mh = map(str,x)
-    std,md = map(str,y)
-    whb = str(wx)
-    wdb = str(wy)
-    if components_N[sth] and components_E[sth]:
-       nwr,swr,lwr,chwr,mwr = sth.split('_')
-       ch_N_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "N"
-       ch_E_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "E"
-       ch_rewrite = nwr + "_" + swr + "_" + lwr + "_" + chwr + "_" + met
-       if magnitudes_out:
-          magnitudes_out.write(' '.join(('MLCHA',ch_N_rewrite,str(components_N[sth][0][0]),str(whb),ch_N_rewrite,str(components_N[sth][0][1]),str(wdb),'\n')))
-          magnitudes_out.write(' '.join(("MLCHA",ch_E_rewrite,str(components_E[sth][0][0]),str(whb),ch_E_rewrite,str(components_E[sth][0][1]),str(wdb),'\n')))
-       channels_dictionary[ch_rewrite] = [[components_N[sth][0][0],whb,components_N[sth][0][1],wdb],[components_E[sth][0][0],whb,components_E[sth][0][1],wdb]]
-if not hm_cutoff or wh_hb_fail or wh_db_fail:
-   # This loop is needed for sth and mh also in json but only if magnitudes_out is true goes to the text out ... nevertheless, outliers list might be empty
-   if magnitudes_out:
-      if len(outliers_hb) > 0:
-         for x in outliers_hb[0]:
-             sth,mh = map(str,list(x))
-             magnitudes_out.write(' '.join(('OUTL_HB',sth,mh,'\n')))
-      if len(outliers_db) > 0:
-         for y in outliers_db[0]:
-             std,md = map(str,list(y))
-             magnitudes_out.write(' '.join(('OUTL_DB',std,md,'\n')))
+# --- COSTRUZIONE OUTPUT STAZIONI DA DATAFRAME AGGREGATO ---
+df_stations = dfa_processed[dfa_processed['orientation'].isin(['N', 'E'])].pivot(index='components_key',
+                                                                                 columns='orientation')
+df_stations = df_stations.dropna(subset=[('amp_calc', 'N'), ('amp_calc', 'E')])
 
+w_hb_dict = dict(zip([x[0] for x in mean_hb_ml_sta], weights_hb)) if mlhb else {}
+w_db_dict = dict(zip([x[0] for x in mean_db_ml_sta], weights_db)) if mldb else {}
 
-for key in components_N:
-    try:
-        components_N[key]
-    except:
-        components_N[key] = False
-    try:
-        components_E[key]
-    except:
-        components_E[key] = False
-    try:
-        channels_dictionary[key]
-    except:
-        channels_dictionary[key] = False
+if not df_stations.empty:
+    for comp_key, row in df_stations.iterrows():
+        st_key = f"{comp_key}_{met}"
+        # Casting a stringa forzato per evitare il warning di PyCharm su Hashable split
+        n_net, n_sta, n_loc, n_cha = str(comp_key).split('_')
 
-    n,s,l,c,m = key.split('_')
-    jstmag = copy.deepcopy(jstationmagnitude)
-    #sys.stderr.write("PeriodE: "+str(components_E[key][8])+"\n")
-    #sys.stderr.write("PeriodN: "+str(components_N[key][8])+"\n")
-    #sys.stderr.write("jstmag['period']:" + str(jstmag["period"] )+"\n")
-    if components_N[key]:
-            #logm = copy.deepcopy(jlogmessage)
-            #logmch = copy.deepcopy(jlogmessagech)
-            jstmag["net"] = n
-            jstmag["sta"] = s
-            jstmag["cha"] = c + 'N'
-            jstmag["loc"] =  "--" if l == 'None' else l
-            jstmag["amp1"] = components_N[key][1][0]
-            jstmag["time1"] = components_N[key][6]
-            jstmag["amp2"] = components_N[key][1][1]
-            jstmag["time2"] = components_N[key][7]
-            if components_N[key][8]:
-                jstmag["period"] = components_N[key][8]
-            jstmag["ep_distance_km"] = components_N[key][2]
-            jstmag["ep_distance_delta"] = components_N[key][3]
-            jstmag["orig_distance"] = components_N[key][4]
-            if components_N[key][9] is not False:
-               jstmag["lat"] = components_N[key][9]
-            if components_N[key][10] is not False:
-               jstmag["lon"] = components_N[key][10]
-            if components_N[key][11] is not None:
-               jstmag["elev"] = components_N[key][11]
-            jstmag["azimuth"] = components_N[key][12]
-            if channels_dictionary[key]:
-               jstmag["hb"] = {"ml": channels_dictionary[key][0][0], "w": float(channels_dictionary[key][0][1])}
-               jstmag["db"] = {"ml": channels_dictionary[key][0][2], "w": float(channels_dictionary[key][0][3])}
-            else:
-               jstmag["hb"] = {}
-               jstmag["db"] = {}
-            #logmch["net"] = jstmag["net"] 
-            #logmch["sta"] = jstmag["sta"]
-            #logmch["loc"] = jstmag["loc"]
-            #logmch["cha"] = jstmag["cha"]
-            #logmch['status'] = 'ok'
-            #logmch['level'] = 'channel'
-            #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'E', "extended": ''}
-            if all(value is not False and value is not None for value in components_N[key][9:12]):
-               resp["stationmagnitudes"].append(jstmag)
-            #resp["log"].append(logmch)
-    jstmag = copy.deepcopy(jstationmagnitude)
-    if components_E[key]:
-            #logm = copy.deepcopy(jlogmessage)
-            #logmch = copy.deepcopy(jlogmessagech)
-            jstmag["net"] = n
-            jstmag["sta"] = s
-            jstmag["cha"] = c + 'E'
-            jstmag["loc"] =  "--" if l == 'None' else l
-            jstmag["amp1"] = components_E[key][1][0]
-            jstmag["time1"] = components_E[key][6]
-            jstmag["amp2"] = components_E[key][1][1]
-            jstmag["time2"] = components_E[key][7]
-            if components_E[key][8]:
-               jstmag["period"] = components_E[key][8]
-            jstmag["ep_distance_km"] = components_E[key][2]
-            jstmag["ep_distance_delta"] = components_E[key][3]
-            jstmag["orig_distance"] = components_E[key][4]
-            if components_E[key][9] is not False:
-               jstmag["lat"] = components_E[key][9]
-            if components_E[key][10] is not False:
-               jstmag["lon"] = components_E[key][10]
-            if components_E[key][11] is not None:
-               jstmag["elev"] = components_E[key][11]
-            jstmag["azimuth"] = components_E[key][12]
-            if channels_dictionary[key]:
-               jstmag["hb"] = {"ml": channels_dictionary[key][1][0], "w": float(channels_dictionary[key][1][1])}
-               jstmag["db"] = {"ml": channels_dictionary[key][1][2], "w": float(channels_dictionary[key][1][3])}
-            else:
-               jstmag["hb"] = {}
-               jstmag["db"] = {}
-               
-            #logmch["net"] = jstmag["net"] 
-            #logmch["sta"] = jstmag["sta"]
-            #logmch["loc"] = jstmag["loc"]
-            #logmch["cha"] = jstmag["cha"]
-            #logmch['status'] = 'ok'
-            #logmch['level'] = 'channel'
-            #logmch['info'] = {"summary": n+' '+s+' '+jstmag["loc"]+' '+c+'N', "extended": ''}
-            if all(value is not False and value is not None for value in components_E[key][9:12]):
-               resp["stationmagnitudes"].append(jstmag)
-            #resp["log"].append(logmch)
-            #resp["stationmagnitudes"].append(jstmag)
-    
+        whb = w_hb_dict.get(st_key, 0.0)
+        wdb = w_db_dict.get(st_key, 0.0)
+
+        for ori in ['N', 'E']:
+            if any(pd.isna(row.loc[(field, ori)]) for field in ('lat', 'lon', 'elev')):
+                continue
+            jstmag: dict = copy.deepcopy(jstationmagnitude)
+            jstmag.update({
+                "net": n_net, "sta": n_sta, "cha": f"{n_cha}{ori}",
+                "loc": "--" if n_loc == 'None' else n_loc,
+                "amp1": row.loc[('minamp', ori)], "time1": row.loc[('time_minamp', ori)],
+                "amp2": row.loc[('maxamp', ori)], "time2": row.loc[('time_maxamp', ori)],
+                "ep_distance_km": row.loc[('epi_dist_km', ori)], "orig_distance": row.loc[('hypo_dist', ori)],
+                "ep_distance_delta": None if pd.isna(row.loc[('epi_dist_deg', ori)]) else row.loc[('epi_dist_deg', ori)],
+                "lat": row.loc[('lat', ori)], "lon": row.loc[('lon', ori)], "elev": row.loc[('elev', ori)],
+                "azimuth": None if pd.isna(row.loc[('epi_azimuth', ori)]) else row.loc[('epi_azimuth', ori)],
+                "hb": {"ml": row.loc[('ml_hb', ori)] if not pd.isna(row.loc[('ml_hb', ori)]) else None,"w": float(whb)},
+                "db": {"ml": row.loc[('ml_db', ori)] if not pd.isna(row.loc[('ml_db', ori)]) else None, "w": float(wdb)}
+            })
+            if 'period' in row.index.levels[0] and pd.notna(row[('period', ori)]):
+                jstmag["period"] = row[('period', ori)]
+
+            resp["stationmagnitudes"].append(jstmag)
+
+            if magnitudes_out:
+                magnitudes_out.write(
+                    f"MLCHA {comp_key}_{ori} {jstmag['hb']['ml']} {whb} {comp_key}_{ori} {jstmag['db']['ml']} {wdb}\n")
+
 if args.out_format == 'json':
-   sys.stdout.write(json_pyml_response(resp))
+    sys.stdout.write(json_pyml_response(resp))
 
-# Now closing all output files
 if magnitudes_out:
-   magnitudes_out.close()
-#main_end_time = time.perf_counter()
-#main_execution_time = main_end_time - main_start_time
+    magnitudes_out.close()
 if log_out:
-   #log_out.write("MAIN: the execution time is: "+str(main_execution_time)+"\n")
-   log_out.close()
+    log_out.close()
 sys.exit()
