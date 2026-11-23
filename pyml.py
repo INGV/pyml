@@ -25,7 +25,9 @@ import pandas as pd
 from geographiclib.geodesic import Geodesic
 from scipy.stats import median_abs_deviation
 
-VERSION = "1.0.0"
+# Hardcoded because the Docker image ships pyml.py without the VERSION file.
+# On every release bump it together with VERSION and publiccode.yml.
+VERSION = "1.7.0"
 KEY = ["net", "sta", "loc", "band_inst", "method"]
 LAWS = {"hb": ("HuttonBoore", 1.110, 0.00189),
         "db": ("DiBona", 1.667, 0.001736)}
