@@ -507,9 +507,12 @@ def calculate(request, corrections=None, *, clips=None, unit=1.0):
                                  "ampmethod": methods[0] if len(methods) == 1 else "mixed",
                                  "magmethod": cfg.mag_mean_type,
                                  "loopexitcondition": reasons["hb"] + "-" + reasons["db"]}
-        # Keep available unpaired channels in the response, as main did.
-        out = f.loc[f["orientation"].isin(["N", "E"])].copy()
+        # Incomplete N/E pairs belong only in the station logs.
+        out = f.loc[f["orientation"].isin(["N", "E"])]
         positions = keys.get_indexer(pd.MultiIndex.from_frame(out[KEY]))
+        paired = both.to_numpy()[positions]
+        out = out.loc[paired].copy()
+        positions = positions[paired]
         for law in LAWS:
             out["w_" + law] = weights_by_law[law][positions]
             out["eligible_" + law] = eligibility_by_law[law][positions]
