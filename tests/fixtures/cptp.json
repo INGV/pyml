@@ -1,0 +1,66 @@
+{
+  "data": {
+    "pyml_conf": {
+      "preconditions": {
+        "theoretical_p": true,
+        "theoretical_s": true,
+        "delta_corner": 5,
+        "max_lowcorner": 15
+      },
+      "station_magnitude": {
+        "mag_mean_type": "meanamp",
+        "amp_mean_type": "geo",
+        "delta_peaks": 1.0,
+        "use_stcorr_hb": true,
+        "use_stcorr_db": true,
+        "when_no_stcorr_hb": true,
+        "when_no_stcorr_db": true
+      },
+      "event_magnitude": {
+        "mindist": 10,
+        "maxdist": 600,
+        "hm_cutoff": [
+          0.3,
+          1.0
+        ],
+        "outliers_max_it": 10,
+        "outliers_red_stop": 0.05,
+        "outliers_nstd": 1,
+        "outliers_cutoff": 0.1
+      }
+    },
+    "origin": {
+      "lat": 38.737,
+      "lon": 14.1625,
+      "depth": 11.03
+    },
+    "amplitudes": [
+      {
+        "net": "IV",
+        "sta": "CPTP",
+        "cha": "HHN",
+        "loc": "--",
+        "amp1": 0.7755380868911743,
+        "time1": "2026-10-30T05:35:43.910Z",
+        "amp2": -0.925866961479187,
+        "time2": "2026-10-30T05:35:44.630Z",
+        "lat": 37.4075,
+        "lon": 14.1625,
+        "elev": 561
+      },
+      {
+        "net": "IV",
+        "sta": "CPTP",
+        "cha": "HHE",
+        "loc": "--",
+        "amp1": 1.0061566829681396,
+        "time1": "2026-10-30T05:35:45.700Z",
+        "amp2": -0.9390428066253662,
+        "time2": "2026-10-30T05:35:45.910Z",
+        "lat": 37.4075,
+        "lon": 14.1625,
+        "elev": 561
+      }
+    ]
+  }
+}

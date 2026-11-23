@@ -14,7 +14,7 @@
 
 # pyml [![Version](https://img.shields.io/badge/dynamic/yaml?label=ver&query=softwareVersion&url=https://raw.githubusercontent.com/INGV/pyml/main/publiccode.yml)](https://github.com/INGV/pyml/blob/main/publiccode.yml) | [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ingv/pyml/docker-image.yml?branch=main&style=flat&logo=GitHub-Actions&logoColor=white&logoSize=auto&label=GitHub%20Actions)](https://github.com/INGV/pyml/actions)
 ## Introduction
-Python code, complementary to pyamp, to calculate ML with different methods and attenuation functions using pyamp_amplitude output file or database table.
+Python code, complementary to pyamp or REI, to calculate ML with different methods and attenuation functions.
 
 ## Quickstart
 ### Docker image
@@ -36,6 +36,27 @@ To run the container, use the command below; the `-v` option is used to "mount" 
 ```
 docker run --rm -v $(pwd)/examples/input:/opt/data ingv/pyml --in_file_name /opt/data/eventid_28745631.json --in_file_format json --out_format json
 ```
+
+## Station metadata
+
+Station azimuths are measured from the station toward the event. A bearing of
+`0.0` degrees is valid and is returned as a JSON number on both horizontal
+components. An azimuth or angular distance that was not calculated is returned
+as JSON `null`. Zero latitude, longitude and elevation are valid metadata;
+stations with missing coordinates or elevation are omitted from the
+`stationmagnitudes` list.
+
+## Tests
+
+With the Python dependencies listed in `Dockerfile` installed, run:
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+The tests run the complete CLI in temporary directories. They cover the CPTP
+zero-azimuth regression reported in REI issue #684, nonzero bearings, sea-level
+and zero-coordinate stations, missing metadata, and unchanged magnitude results.
 
 ## Contribute
 Thanks to your contributions!
