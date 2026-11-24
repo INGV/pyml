@@ -44,4 +44,8 @@ COPY entrypoint.sh /opt
 
 #
 WORKDIR /opt
+# The release version, read at runtime by the '/version' route that Apollo
+# adds to shell2http. Copied last so a version bump rebuilds only this layer.
+COPY VERSION /opt/VERSION
+
 ENTRYPOINT ["bash", "/opt/entrypoint.sh"]
