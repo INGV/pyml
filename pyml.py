@@ -29,7 +29,7 @@ from scipy.stats import median_abs_deviation
 # VERSION file as /opt/VERSION (read by Apollo through shell2http), but
 # pyml.py does not read it, so it behaves the same outside the image.
 # On every release bump it together with VERSION and publiccode.yml.
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 KEY = ["net", "sta", "loc", "band_inst", "method"]
 LAWS = {"hb": ("HuttonBoore", 1.110, 0.00189),
         "db": ("DiBona", 1.667, 0.001736)}
