@@ -27,7 +27,7 @@ from scipy.stats import median_abs_deviation
 
 # Hardcoded because the Docker image ships pyml.py without the VERSION file.
 # On every release bump it together with VERSION and publiccode.yml.
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 KEY = ["net", "sta", "loc", "band_inst", "method"]
 LAWS = {"hb": ("HuttonBoore", 1.110, 0.00189),
         "db": ("DiBona", 1.667, 0.001736)}
