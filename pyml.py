@@ -25,7 +25,9 @@ import pandas as pd
 from geographiclib.geodesic import Geodesic
 from scipy.stats import median_abs_deviation
 
-# Hardcoded because the Docker image ships pyml.py without the VERSION file.
+# Reported as "version" in the JSON output. The Docker image also ships the
+# VERSION file as /opt/VERSION (read by Apollo through shell2http), but
+# pyml.py does not read it, so it behaves the same outside the image.
 # On every release bump it together with VERSION and publiccode.yml.
 VERSION = "1.8.0"
 KEY = ["net", "sta", "loc", "band_inst", "method"]
